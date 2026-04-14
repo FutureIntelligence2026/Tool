@@ -526,26 +526,34 @@ export default function App() {
     );
   };
 
+  const buildDemoMail=(step)=>{
+    const demoLead={lead:{vorname:"Max",nachname:"Mustermann",email:testMailTo||"test@example.de",ort:"Berlin"},insurer:Object.keys(VERSICHERER)[0],previewUrl:""};
+    return getEffectiveMail(demoLead,step);
+  };
+
+  const openMailApp=()=>{
+    if(!testMailModal)return;
+    const mail=buildDemoMail(testMailModal.step);
+    // Truncate body to avoid mailto: length limit (~2000 chars)
+    const bodyShort=mail.body.replace(SIGNATUR_TEXT,"").trim().slice(0,1800);
+    const url=`mailto:${encodeURIComponent(testMailTo||"")}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(bodyShort)}`;
+    window.location.href=url;
+    setTestMailResult("✅ Mail-App geöffnet — bitte manuell absenden.");
+  };
+
   const sendTestMail=async()=>{
     if(!testMailTo||!testMailModal)return;
     const acc=activeAccounts[0];
     const pass=accPasswords[acc?.id];
-    const demoLead={lead:{vorname:"Max",nachname:"Mustermann",email:testMailTo,ort:"Berlin"},insurer:Object.keys(VERSICHERER)[0],previewUrl:""};
-    const mail=getEffectiveMail(demoLead,testMailModal.step);
-    // Try SMTP if account + password available
-    if(acc&&pass){
-      setTestMailSending(true);setTestMailResult(null);
-      try{
-        const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:testMailTo,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
-        const data=await res.json();
-        setTestMailResult(data.ok?"✅ Test-Mail gesendet!":"❌ "+data.error);
-      }catch(e){setTestMailResult("❌ "+e.message);}
-      setTestMailSending(false);
-    } else {
-      // Fallback: open mail app (Gmail, Outlook, Apple Mail etc.)
-      window.open(`mailto:${testMailTo}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`,"_self");
-      setTestMailResult("✅ Mail-App geöffnet — bitte manuell absenden.");
-    }
+    if(!acc||!pass){openMailApp();return;}
+    const mail=buildDemoMail(testMailModal.step);
+    setTestMailSending(true);setTestMailResult(null);
+    try{
+      const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:testMailTo,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
+      const data=await res.json();
+      setTestMailResult(data.ok?"✅ Test-Mail gesendet!":"❌ "+data.error);
+    }catch(e){setTestMailResult("❌ "+e.message);}
+    setTestMailSending(false);
   };
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -594,21 +602,28 @@ export default function App() {
       {testMailModal&&(
         <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div style={{background:"#fff",borderRadius:16,padding:28,maxWidth:480,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
-            <div style={{fontSize:16,fontWeight:700,color:"#1e2532",marginBottom:6}}>✉ Test-Mail senden</div>
-            <div style={{fontSize:13,color:"#64748b",marginBottom:20}}>Sendet Mail {testMailModal.step} mit Demo-Daten an deine Adresse</div>
-            <label style={S.lbl}>An (Test-E-Mail)</label>
-            <input value={testMailTo} onChange={e=>setTestMailTo(e.target.value)} placeholder="deine@email.de" style={{...S.inp(false),marginBottom:16}} onKeyDown={e=>e.key==="Enter"&&sendTestMail()}/>
-            <div style={{background:"#f8fafc",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#475569",marginBottom:16,border:"1px solid #e2e8f0"}}>
-              <div style={{fontWeight:600,marginBottom:2}}>Betreff-Vorschau:</div>
-              <div style={{color:"#1e2532"}}>{(templates.find(t=>t.step===testMailModal.step)?.subject||"").replace(/{{VORNAME}}/g,"Max").replace(/{{ORT}}/g,"Berlin").replace(/{{VERSICHERER}}/g,"SIGNAL IDUNA")}</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#1e2532",marginBottom:6}}>✉ Test-Mail senden — Mail {testMailModal.step}</div>
+            <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Demo-Daten: Max Mustermann, Berlin</div>
+            <label style={S.lbl}>An (deine E-Mail-Adresse)</label>
+            <input value={testMailTo} onChange={e=>setTestMailTo(e.target.value)} placeholder="deine@gmail.com" style={{...S.inp(false),marginBottom:12}} onKeyDown={e=>e.key==="Enter"&&openMailApp()}/>
+            <div style={{background:"#f8fafc",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#475569",marginBottom:14,border:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:600,marginBottom:2}}>Betreff:</div>
+              <div style={{color:"#1e2532"}}>{(templates.find(t=>t.step===testMailModal.step)?.subject||"").replace(/{{VORNAME}}/g,"Max").replace(/{{NACHNAME}}/g,"Mustermann").replace(/{{ORT}}/g,"Berlin").replace(/{{VERSICHERER}}/g,"SIGNAL IDUNA")}</div>
             </div>
-            <div style={{background:"#eff6ff",borderRadius:8,padding:"8px 12px",fontSize:11,color:"#3b82f6",marginBottom:12,border:"1px solid #bfdbfe"}}>
-              💡 Mit SMTP-Passwort → direkt gesendet. Ohne Passwort → öffnet Gmail / Apple Mail / Outlook.
-            </div>
-            {testMailResult&&<div style={{padding:"8px 14px",borderRadius:8,marginBottom:14,fontSize:13,background:testMailResult.startsWith("✅")?"#f0fdf4":"#fff1f2",color:testMailResult.startsWith("✅")?"#15803d":"#dc2626",border:`1px solid ${testMailResult.startsWith("✅")?"#bbf7d0":"#fecaca"}`}}>{testMailResult}</div>}
-            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            {testMailResult&&<div style={{padding:"8px 14px",borderRadius:8,marginBottom:12,fontSize:13,background:testMailResult.startsWith("✅")?"#f0fdf4":"#fff1f2",color:testMailResult.startsWith("✅")?"#15803d":"#dc2626",border:`1px solid ${testMailResult.startsWith("✅")?"#bbf7d0":"#fecaca"}`}}>{testMailResult}</div>}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
               <button style={S.btn("ghost")} onClick={()=>{setTestMailModal(null);setTestMailResult(null);}}>Abbrechen</button>
-              <button style={S.btn()} onClick={sendTestMail} disabled={testMailSending||!testMailTo}>{testMailSending?"Sende...":"📤 Test senden"}</button>
+              <button style={{...S.btn("blue"),display:"flex",alignItems:"center",gap:5}} onClick={openMailApp} disabled={!testMailTo}>
+                📬 In Mail-App öffnen
+              </button>
+              {activeAccounts[0]&&accPasswords[activeAccounts[0].id]&&(
+                <button style={S.btn()} onClick={sendTestMail} disabled={testMailSending||!testMailTo}>
+                  {testMailSending?"Sende...":"📤 Direkt senden (SMTP)"}
+                </button>
+              )}
+            </div>
+            <div style={{fontSize:10,color:"#94a3b8",marginTop:10,textAlign:"right"}}>
+              "In Mail-App öffnen" funktioniert mit Gmail, Outlook, Apple Mail & Co.
             </div>
           </div>
         </div>
