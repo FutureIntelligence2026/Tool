@@ -7,7 +7,7 @@ const TEMPLATE_VERSION = "v4";
 // ═══════════════════════════════════════════════════════════════════════════
 const IC = {
   url:        "https://iconicone.de",
-  hubspot:    "https://calendly.com/website-iconicone/30min",
+  hubspot:    "https://calendly.com/website-iconicone/15min",
   logo:       "https://www.iconicone.de/img/iconicone-logo-wide.png",
   achiFace:   "https://www.iconicone.de/img/achi-face.jpeg",
   achiPortrait:"https://www.iconicone.de/img/achi-portrait.jpeg",
