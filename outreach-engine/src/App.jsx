@@ -33,7 +33,7 @@ const IC = {
 // SIGNATUR HTML — erscheint am Ende jeder Mail
 // ═══════════════════════════════════════════════════════════════════════════
 const SIGNATUR_HTML = `
-<div style="margin-top:14px;padding-top:12px;border-top:2px solid #f97316;font-family:Arial,sans-serif;max-width:480px">
+<div style="margin-top:18px;font-family:Arial,sans-serif;max-width:480px">
   <table cellpadding="0" cellspacing="0" border="0" width="100%">
     <tr>
       <td style="padding-right:14px;vertical-align:middle;width:68px">
@@ -242,7 +242,9 @@ function interpolateHtml(text, lead, insurerName, previewUrl, displayUrl) {
   bodyHtml = bodyHtml.replace(new RegExp(HUB_TOKEN, "g"), hubHtml);
 
   const fullHtml = bodyHtml + (hasSig ? SIGNATUR_HTML : "");
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0;padding:16px;background:#ffffff;font-family:Arial,sans-serif;color:#1a1a1a">${fullHtml}</body></html>`;
+  // Use table-based layout + bgcolor attribute so white background works in ALL email clients
+  // (Gmail/Outlook strip CSS background but always respect bgcolor HTML attribute)
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0;padding:0;background-color:#ffffff;" bgcolor="#ffffff"><table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="background-color:#ffffff;"><tr><td bgcolor="#ffffff" style="padding:20px 16px;background-color:#ffffff;font-family:Arial,sans-serif;color:#1a1a1a;">${fullHtml}</td></tr></table></body></html>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
