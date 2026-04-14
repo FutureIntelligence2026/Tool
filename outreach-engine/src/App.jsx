@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-const TEMPLATE_VERSION = "v6";
+const TEMPLATE_VERSION = "v7";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ICONICONE BRAND KONFIG — direkt von iconicone.de
@@ -33,7 +33,7 @@ const IC = {
 // SIGNATUR HTML — erscheint am Ende jeder Mail
 // ═══════════════════════════════════════════════════════════════════════════
 const SIGNATUR_HTML = `
-<div style="margin-top:18px;font-family:Arial,sans-serif;max-width:480px">
+<div style="margin-top:14px;padding-top:12px;border-top:2px solid #f97316;font-family:Arial,sans-serif;max-width:480px">
   <table cellpadding="0" cellspacing="0" border="0" width="100%">
     <tr>
       <td style="padding-right:14px;vertical-align:middle;width:68px">
@@ -99,7 +99,6 @@ Viele Grüße
 
 kurze Nachfrage — haben Sie die Website gesehen?
 {{URL}}
-
 Was Sie bekommen:
 ✓ SEO-optimiert — damit Sie bei Google in {{ORT}} gefunden werden
 ✓ Conversion-optimiert — damit Besucher zu echten Anfragen werden
@@ -114,7 +113,6 @@ Einmalig 499€. Kein Abo. Keine Folgekosten. Fertig in 24h.
 
 Termin buchen — 15 Minuten reichen:
 {{HUBSPOT}}
-
 Viele Grüße
 {{SIGNATUR}}`,
   },
@@ -130,12 +128,10 @@ Die meisten {{VERSICHERER}}-Berater, die ich kenne, sagen: kaum bis keine. Weil 
 
 Genau das löst die Seite, die ich für Sie erstellt habe:
 {{URL}}
-
 499€ einmalig. SEO eingebaut. Neue Anfragen laufen automatisch zu Ihnen.
 
 Möchten Sie das kurz besprechen?
 {{HUBSPOT}}
-
 Oder einfach antworten — ich erkläre alles in 15 Minuten.
 
 Viele Grüße
@@ -149,14 +145,12 @@ Viele Grüße
 
 ich melde mich ein letztes Mal wegen Ihrer Website:
 {{URL}}
-
 Ich frage, weil ich in {{ORT}} aktuell nur eine Seite für {{VERSICHERER}}-Berater livesetze — und ich diese Möglichkeit nicht an Ihnen vorbeigehen lassen wollte.
 
 499€ einmalig. In 24h live.
 
 Falls es passt:
 {{HUBSPOT}}
-
 Falls nicht — kein Problem, ich melde mich nicht mehr.
 
 Viele Grüße
@@ -172,7 +166,6 @@ ich nehme Sie aus meinen Nachrichten raus — Sie hören nichts mehr von mir.
 
 Die Website bleibt noch eine Weile online, falls Sie irgendwann Interesse haben:
 {{URL}}
-
 Falls sich Ihre Situation ändert, melden Sie sich gerne:
 🌐 ${IC.url}
 📞 ${IC.tel}
