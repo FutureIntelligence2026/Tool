@@ -480,6 +480,16 @@ export default function App() {
     return()=>clearInterval(id);
   },[leads,accounts,accPasswords,templates]);
 
+  // ── AUTO REPLY CHECK: every 15 min ─────────────────────────────────────────
+  useEffect(()=>{
+    const id=setInterval(()=>{
+      const hasPass=accounts.some(a=>a.active!==false&&accPasswords[a.id]);
+      const hasActive=leads.some(l=>l.status==="active");
+      if(hasPass&&hasActive)checkReplies();
+    },15*60*1000);
+    return()=>clearInterval(id);
+  },[leads,accounts,accPasswords]);
+
   const todayStr=new Date().toDateString();
   const allSteps=leads.flatMap(l=>l.sequence||[]);
   const stats={
