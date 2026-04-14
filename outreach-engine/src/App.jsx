@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 
+const TEMPLATE_VERSION = "v3";
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ICONICONE BRAND KONFIG — direkt von iconicone.de
 // ═══════════════════════════════════════════════════════════════════════════
@@ -81,7 +83,6 @@ const DEFAULT_TEMPLATES = [
 ich recherchiere gerade nach {{VERSICHERER}}-Beratern in {{ORT}} — und bin dabei auf Sie gestoßen.
 
 Ich habe Ihnen bereits eine fertige Website erstellt:
-
 👉 {{URL}}
 
 Die Seite ist komplett auf Sie zugeschnitten — mit Ihren Kontaktdaten, Ihren Leistungen und einem Kontaktformular, das neue Kundenanfragen direkt zu Ihnen leitet.
@@ -202,7 +203,7 @@ function textToHtml(text) {
   const escaped = text
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   const paragraphs = escaped.split(/\n{2,}/);
-  const htmlParts = paragraphs.map(p => {
+  const htmlParts = paragraphs.filter(p=>p.trim()).map(p => {
     const lines = p.split("\n").join("<br/>");
     return `<p style="margin:0 0 14px 0;line-height:1.7;color:#1a1a1a;font-size:15px;font-family:Arial,sans-serif">${lines}</p>`;
   });
@@ -347,6 +348,16 @@ function generatePreviewUrl(lead, insurerId) {
   return `${base}?${q}`;
 }
 
+async function shortenUrl(longUrl) {
+  if (!longUrl) return longUrl;
+  try {
+    const resp = await fetch(`/api/shorten?url=${encodeURIComponent(longUrl)}`);
+    const data = await resp.json();
+    if (data.short && data.short.startsWith("http")) return data.short;
+  } catch {}
+  return longUrl;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════════════════════
@@ -391,13 +402,13 @@ export default function App() {
     try{
       const sl=localStorage.getItem("ic_leads");     if(sl) setLeads(JSON.parse(sl));
       const sa=localStorage.getItem("ic_accounts");  if(sa) setAccounts(JSON.parse(sa));
-      const st=localStorage.getItem("ic_templates"); if(st) setTemplates(JSON.parse(st));
+      const sv=localStorage.getItem("ic_tplver"); const st=localStorage.getItem("ic_templates"); if(st&&sv===TEMPLATE_VERSION) setTemplates(JSON.parse(st));
       const sp=localStorage.getItem("ic_passwords"); if(sp) setAccPasswords(JSON.parse(sp));
     }catch(e){}
   },[]);
   useEffect(()=>{try{localStorage.setItem("ic_leads",JSON.stringify(leads));}catch(e){}},[leads]);
   useEffect(()=>{try{localStorage.setItem("ic_accounts",JSON.stringify(accounts));}catch(e){}},[accounts]);
-  useEffect(()=>{try{localStorage.setItem("ic_templates",JSON.stringify(templates));}catch(e){}},[templates]);
+  useEffect(()=>{try{localStorage.setItem("ic_templates",JSON.stringify(templates));localStorage.setItem("ic_tplver",TEMPLATE_VERSION);}catch(e){}},[templates]);
   useEffect(()=>{try{localStorage.setItem("ic_passwords",JSON.stringify(accPasswords));}catch(e){}},[accPasswords]);
 
   const todayStr=new Date().toDateString();
@@ -427,8 +438,8 @@ export default function App() {
 
   const makeLead=(ld,insId)=>({id:Date.now()+Math.random(),lead:{...ld},insurer:insId,previewUrl:generatePreviewUrl(ld,insId),status:"active",sequence:scheduleSequence(ld,new Date(),activeAccounts,templates),createdAt:new Date(),repliedAt:null,mailOverrides:{}});
   const validateLead=l=>{const e={};["vorname","nachname","email","telefon","ort"].forEach(k=>{if(!l[k]?.trim())e[k]=true;});setFormErrors(e);return!Object.keys(e).length;};
-  const addSingle=()=>{if(!validateLead(leadForm))return;setLeads(p=>[...p,makeLead(leadForm,selIns)]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");};
-  const importCSV=()=>{
+  const addSingle=async()=>{if(!validateLead(leadForm))return;const nl=makeLead(leadForm,selIns);const su=await shortenUrl(nl.previewUrl);setLeads(p=>[...p,{...nl,previewUrl:su}]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");};
+  const importCSV=async()=>{
     const lines=csvText.trim().split("\n").filter(Boolean).slice(1);const log=[];
     const nl=lines.map((line)=>{
       const parts=line.split(";").map(s=>s?.trim());
@@ -439,7 +450,8 @@ export default function App() {
       log.push({name:`${vorname} ${nachname}`,ins:VERSICHERER[det]?.name,auto:!!detectFromRow(parts)});
       return makeLead(ld,det);
     }).filter(Boolean);
-    setLeads(p=>[...p,...nl]);setDetectLog(log);setCsvText("");setTab("leads");
+    const shortened=await Promise.all(nl.map(async l=>({...l,previewUrl:await shortenUrl(l.previewUrl)})));
+    setLeads(p=>[...p,...shortened]);setDetectLog(log);setCsvText("");setTab("leads");
   };
 
   const markReplied=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:"replied",repliedAt:new Date(),sequence:l.sequence.map(s=>s.status==="scheduled"?{...s,status:"stopped"}:s)}));
@@ -451,7 +463,7 @@ export default function App() {
   const clearOverride=(lid,step)=>setLeads(p=>p.map(l=>l.id!==lid?l:{...l,mailOverrides:{...l.mailOverrides,[step]:undefined}}));
   const archiveLead=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:l.status==="archived"?"active":"archived"}));
   const startEditLead=lead=>{setEditLeadId(lead.id);setEditLeadForm({...lead.lead});};
-  const saveEditLead=()=>{if(!editLeadId||!editLeadForm)return;setLeads(p=>p.map(l=>l.id!==editLeadId?l:{...l,lead:{...editLeadForm},previewUrl:generatePreviewUrl(editLeadForm,l.insurer)}));setEditLeadId(null);setEditLeadForm(null);};
+  const saveEditLead=async()=>{if(!editLeadId||!editLeadForm)return;const insId=leads.find(l=>l.id===editLeadId)?.insurer;const su=await shortenUrl(generatePreviewUrl(editLeadForm,insId));setLeads(p=>p.map(l=>l.id!==editLeadId?l:{...l,lead:{...editLeadForm},previewUrl:su}));setEditLeadId(null);setEditLeadForm(null);};
 
   const getEffectiveMail=(lead,step)=>{
     const tpl=templates.find(t=>t.step===step);
@@ -547,10 +559,11 @@ export default function App() {
 
   const [testSmtpPass,setTestSmtpPass]=useState("");
 
-  const buildDemoMail=(step)=>{
+  const buildDemoMail=async(step)=>{
     const insId=Object.keys(VERSICHERER)[0];
     const demoData={vorname:"Max",nachname:"Mustermann",email:testMailTo||"test@example.de",ort:"Berlin"};
-    const demoLead={lead:demoData,insurer:insId,previewUrl:generatePreviewUrl(demoData,insId)};
+    const shortUrl=await shortenUrl(generatePreviewUrl(demoData,insId));
+    const demoLead={lead:demoData,insurer:insId,previewUrl:shortUrl};
     return getEffectiveMail(demoLead,step);
   };
 
@@ -564,7 +577,7 @@ export default function App() {
     }
     // Save password for future use
     if(testSmtpPass) setAccPasswords(p=>({...p,[acc.id]:testSmtpPass}));
-    const mail=buildDemoMail(testMailModal.step);
+    const mail=await buildDemoMail(testMailModal.step);
     setTestMailSending(true);setTestMailResult(null);
     try{
       const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:testMailTo,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
@@ -766,7 +779,7 @@ export default function App() {
                         <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:4}}>
                           <span style={{fontSize:8,color:"#3a3830",flexShrink:0,textTransform:"uppercase"}}>Preview-Link (personalisiert):</span>
                           <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
-                            <button title="Neu generieren" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}} onClick={()=>setLeadUrl(lead.id,generatePreviewUrl(lead.lead,lead.insurer))}>⟳</button>
+                            <button title="Neu generieren" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}} onClick={async()=>{const su=await shortenUrl(generatePreviewUrl(lead.lead,lead.insurer));setLeadUrl(lead.id,su);}}>⟳</button>
                             {lead.previewUrl&&<button title="Kopieren" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}} onClick={()=>navigator.clipboard.writeText(lead.previewUrl)}>📋</button>}
                             {lead.previewUrl&&<a href={lead.previewUrl} target="_blank" rel="noreferrer" title="Vorschau öffnen" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9,textDecoration:"none"}}>👁 Vorschau</a>}
                           </div>
