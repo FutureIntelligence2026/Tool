@@ -568,7 +568,7 @@ export default function App() {
     today:allSteps.filter(s=>s.scheduledAt&&new Date(s.scheduledAt).toDateString()===todayStr).length,
     sent:allSteps.filter(s=>s.status==="sent").length,
     failed:allSteps.filter(s=>s.status==="failed").length,
-    pending:allSteps.filter(s=>s.status==="pending"||s.status==="scheduled").length,
+    pending:leads.filter(l=>l.status==="active"&&(l.sequence||[]).find(s=>s.step===1)?.status!=="sent").length,
     next:leads.filter(l=>l.status==="active").flatMap(l=>(l.sequence||[]).filter(s=>s.status==="scheduled").map(s=>({...s,name:`${l.lead.vorname} ${l.lead.nachname}`}))).sort((a,b)=>new Date(a.scheduledAt)-new Date(b.scheduledAt))[0],
   };
 
@@ -617,6 +617,7 @@ export default function App() {
   };
 
   const markReplied=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:"replied",repliedAt:new Date(),sequence:l.sequence.map(s=>s.status==="scheduled"?{...s,status:"stopped"}:s)}));
+  const unmarkReplied=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:"active",repliedAt:null,sequence:l.sequence.map(s=>s.status==="stopped"&&!s.sentAt?{...s,status:"scheduled"}:s)}));
   const markStepSent=(lid,step)=>setLeads(p=>p.map(l=>{if(l.id!==lid)return l;const seq=l.sequence.map(s=>s.step===step?{...s,status:"sent",sentAt:new Date()}:s);const done=seq.every(s=>s.status==="sent"||s.status==="stopped");return{...l,sequence:seq,status:done?"completed":l.status};}));
   const stopLead=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:"stopped",sequence:l.sequence.map(s=>s.status==="scheduled"?{...s,status:"stopped"}:s)}));
   const removeLead=id=>setLeads(p=>p.filter(l=>l.id!==id));
@@ -954,6 +955,7 @@ export default function App() {
                     {lead.status==="active"&&(()=>{const ns=lead.sequence?.find(s=>s.status==="scheduled");if(!ns)return null;return<div style={{fontSize:8,textAlign:"right",minWidth:65}}><div style={{color:IC.gold,fontWeight:700}}>{new Date(ns.scheduledAt).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})} {new Date(ns.scheduledAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</div><div style={{color:accColor(ns.accountId),marginTop:1,fontSize:7}}>{accounts.find(a=>a.id===ns.accountId)?.email?.split("@")[0]||"?"}</div></div>;})()}
                     <div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
                       {lead.status==="active"&&<button style={S.btn("green")} onClick={()=>markReplied(lead.id)}>✉ Geantwortet</button>}
+                      {lead.status==="replied"&&<button style={{...S.btn("ghost"),fontSize:11}} onClick={()=>unmarkReplied(lead.id)}>↩ Zurücksetzen</button>}
                       {lead.status==="active"&&<button style={S.btn("red")} onClick={()=>stopLead(lead.id)}>⏹</button>}
                       <button title="Bearbeiten" style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px"}} onClick={()=>startEditLead(lead)}>✏</button>
                       <button title={lead.status==="archived"?"Wiederherstellen":"Archivieren"} style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px",color:"#94a3b8"}} onClick={()=>archiveLead(lead.id)}>{lead.status==="archived"?"↩":"📁"}</button>
