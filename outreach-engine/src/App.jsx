@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-const TEMPLATE_VERSION = "v5";
+const TEMPLATE_VERSION = "v6";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ICONICONE BRAND KONFIG — direkt von iconicone.de
@@ -75,7 +75,7 @@ ${IC.title} · ICONICONE
 // ═══════════════════════════════════════════════════════════════════════════
 const DEFAULT_TEMPLATES = [
   {
-    step:1, label:"Demo", tag:"Tag 0", tagColor:IC.gold,
+    step:1, label:"Demo", tag:"Tag 0", tagColor:IC.gold, daysAfterPrev:0,
     desc:"Demo-Website zeigen. Kein Preis, kein Druck.",
     subject:`Kurze Frage zu Ihrer Online-Präsenz, {{NACHNAME}}`,
     body:`Hallo {{VORNAME}},
@@ -92,7 +92,7 @@ Viele Grüße
 {{SIGNATUR}}`,
   },
   {
-    step:2, label:"Preis & Anker", tag:"+1 Tag", tagColor:"#3b82f6",
+    step:2, label:"Preis & Anker", tag:"+1 Tag", tagColor:"#3b82f6", daysAfterPrev:1,
     desc:"499€ als No-Brainer. HubSpot-Termin.",
     subject:`Andere zahlen 3.000€ dafür — ich mach's für 499€`,
     body:`Hallo {{VORNAME}},
@@ -119,7 +119,7 @@ Viele Grüße
 {{SIGNATUR}}`,
   },
   {
-    step:3, label:"Nutzen", tag:"+7 Tage", tagColor:"#8b5cf6",
+    step:3, label:"Nutzen", tag:"+7 Tage", tagColor:"#8b5cf6", daysAfterPrev:7,
     desc:"Neukunden, Google-Sichtbarkeit. Frage stellen.",
     subject:`Wie viele Neukunden gewinnen Sie aktuell über Google?`,
     body:`Hallo {{VORNAME}},
@@ -142,7 +142,7 @@ Viele Grüße
 {{SIGNATUR}}`,
   },
   {
-    step:4, label:"Letzte Chance", tag:"+7 Tage", tagColor:"#f97316",
+    step:4, label:"Letzte Chance", tag:"+7 Tage", tagColor:"#f97316", daysAfterPrev:7,
     desc:"FOMO subtil. Eine letzte direkte Frage.",
     subject:`Noch offen: Ihre Website in {{ORT}}`,
     body:`Hallo {{VORNAME}},
@@ -163,7 +163,7 @@ Viele Grüße
 {{SIGNATUR}}`,
   },
   {
-    step:5, label:"Break-up", tag:"+1 Monat", tagColor:"#6b7280",
+    step:5, label:"Break-up", tag:"+1 Monat", tagColor:"#6b7280", daysAfterPrev:30,
     desc:"Respektvoll raus. Tür offen lassen.",
     subject:`Ich nehme Sie aus meiner Liste, {{VORNAME}}`,
     body:`Hallo {{VORNAME}},
@@ -446,6 +446,39 @@ export default function App() {
   useEffect(()=>{try{localStorage.setItem("ic_accounts",JSON.stringify(accounts));}catch(e){}},[accounts]);
   useEffect(()=>{try{localStorage.setItem("ic_templates",JSON.stringify(templates));localStorage.setItem("ic_tplver",TEMPLATE_VERSION);}catch(e){}},[templates]);
   useEffect(()=>{try{localStorage.setItem("ic_passwords",JSON.stringify(accPasswords));}catch(e){}},[accPasswords]);
+
+  // ── AUTO-SEND: every 60s check for due sequence steps and send via SMTP ──
+  useEffect(()=>{
+    const run=async()=>{
+      const now=new Date();
+      for(const lead of leads){
+        if(lead.status==="archived"||lead.status==="replied"||lead.status==="stopped")continue;
+        for(const seq of (lead.sequence||[])){
+          if(seq.status!=="scheduled"||!seq.scheduledAt)continue;
+          if(new Date(seq.scheduledAt)>now)continue;
+          const acc=accounts.find(a=>a.id===seq.accountId&&a.active!==false);
+          if(!acc)continue;
+          const pass=accPasswords[acc.id];
+          if(!pass)continue;
+          const mail=getEffectiveMail(lead,seq.step);
+          try{
+            const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:lead.lead.email,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
+            const data=await res.json();
+            if(data.ok){
+              setLeads(p=>p.map(l=>{
+                if(l.id!==lead.id)return l;
+                const s2=l.sequence.map(s=>s.step===seq.step?{...s,status:"sent",sentAt:new Date()}:s);
+                const done=s2.every(s=>s.status==="sent"||s.status==="stopped");
+                return{...l,sequence:s2,status:done?"completed":l.status};
+              }));
+            }
+          }catch(e){}
+        }
+      }
+    };
+    const id=setInterval(run,60000);
+    return()=>clearInterval(id);
+  },[leads,accounts,accPasswords,templates]);
 
   const todayStr=new Date().toDateString();
   const allSteps=leads.flatMap(l=>l.sequence||[]);
