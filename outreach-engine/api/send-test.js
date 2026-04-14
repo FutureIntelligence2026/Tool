@@ -11,11 +11,15 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
+  // Extract the domain from the sender address to use as EHLO hostname
+  const senderDomain = smtp.user.split("@")[1] || "iconicone.de";
+
   try {
     const transporter = nodemailer.createTransport({
       host: smtp.host,
       port: smtp.port || 587,
       secure: smtp.port === 465,
+      name: senderDomain, // EHLO hostname — prevents internal Vercel IP showing up
       auth: {
         user: smtp.user,
         pass: smtp.pass,
@@ -31,13 +35,14 @@ export default async function handler(req, res) {
 
     await transporter.sendMail({
       from: fromAddress,
+      replyTo: smtp.user,
       to,
       subject,
       html: html || subject,
+      text: subject, // plain-text fallback reduces spam score
       headers: {
-        "X-Mailer": "ICONICONE Outreach",
+        "X-Mailer": "Nodemailer",
         "X-Priority": "3",
-        "Precedence": "bulk",
       },
     });
 
