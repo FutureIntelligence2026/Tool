@@ -431,7 +431,7 @@ export default function App() {
   const [editLeadId,setEditLeadId]=useState(null);
   const [editLeadForm,setEditLeadForm]=useState(null);
 
-  const activeAccounts=accounts.filter(a=>a.active);
+  const activeAccounts=accounts.filter(a=>a.active!==false);
 
   // ── LOCALSTORAGE PERSISTENCE ───────────────────────────────────────────────
   useEffect(()=>{
