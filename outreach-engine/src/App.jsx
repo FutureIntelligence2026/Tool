@@ -295,6 +295,22 @@ const S = {
 const VDot=({id,sz=6})=><div style={{width:sz,height:sz,borderRadius:"50%",background:VERSICHERER[id]?.primary||"#444",flexShrink:0}}/>;
 
 // ═══════════════════════════════════════════════════════════════════════════
+// WEBSITE TEMPLATES (public/templates/{folder}/index.html)
+// ═══════════════════════════════════════════════════════════════════════════
+const WEBSITE_TEMPLATES = [
+  {folder:"arag-christian-lange",      label:"Christian Lange",           tag:"ARAG"},
+  {folder:"arag-claire-schoeps",       label:"Claire Schöps",             tag:"ARAG"},
+  {folder:"arag-micic-osnabrueck",     label:"Micic Osnabrück",           tag:"ARAG"},
+  {folder:"darko-ljevar-arag",         label:"Darko Ljevar",              tag:"ARAG"},
+  {folder:"xemgin-demir-arag",         label:"Xemgin Demir",              tag:"ARAG"},
+  {folder:"koitek-versicherung",       label:"Koitek Versicherung",       tag:"Makler"},
+  {folder:"maik-nowack-versicherungsmakler", label:"Maik Nowack",         tag:"Makler"},
+  {folder:"stefan-fister",             label:"Stefan Fister",             tag:"Versicherung"},
+  {folder:"steinberg-sv",              label:"Steinberg SV",              tag:"Versicherung"},
+  {folder:"lumiere-beaute",            label:"Lumière Beauté",            tag:"Sonstiges"},
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════════════════════
 export default function App() {
@@ -323,8 +339,7 @@ export default function App() {
   const [showMailPreview,setShowMailPreview]=useState(null); // {lead, step}
   const [filterStatus,setFilterStatus]=useState("all");
   const [filterIns,setFilterIns]=useState("all");
-  const [versichererUrls,setVersichererUrls]=useState(()=>{try{return JSON.parse(localStorage.getItem('ic_vurls')||'{}')}catch{return {}}});
-  const [vPreview,setVPreview]=useState(null); // insurer id
+  const [vPreview,setVPreview]=useState(null); // template folder name
   const [testMailModal,setTestMailModal]=useState(null); // {step}
   const [testMailTo,setTestMailTo]=useState("");
   const [testMailSending,setTestMailSending]=useState(false);
@@ -465,14 +480,12 @@ export default function App() {
     );
   };
 
-  const saveVUrl=(id,url)=>{const u={...versichererUrls,[id]:url};setVersichererUrls(u);localStorage.setItem('ic_vurls',JSON.stringify(u));};
-
   const sendTestMail=async()=>{
     if(!testMailTo||!testMailModal)return;
     const acc=activeAccounts[0];
     const pass=accPasswords[acc?.id];
     if(!acc||!pass){setTestMailResult("⚠ Bitte zuerst IMAP-Passwort bei Account eintragen.");return;}
-    const demoLead={lead:{vorname:"Max",nachname:"Mustermann",email:testMailTo,ort:"Berlin"},insurer:Object.keys(VERSICHERER)[0],previewUrl:Object.values(versichererUrls)[0]||""};
+    const demoLead={lead:{vorname:"Max",nachname:"Mustermann",email:testMailTo,ort:"Berlin"},insurer:Object.keys(VERSICHERER)[0],previewUrl:""};
     const mail=getEffectiveMail(demoLead,testMailModal.step);
     setTestMailSending(true);setTestMailResult(null);
     try{
@@ -492,15 +505,15 @@ export default function App() {
         <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.7)",display:"flex",flexDirection:"column"}}>
           <div style={{background:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #e2e8f0",boxShadow:"0 2px 8px rgba(0,0,0,0.1)"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:10,height:10,borderRadius:"50%",background:VERSICHERER[vPreview]?.primary}}/>
-              <span style={{fontWeight:700,fontSize:14,color:"#1e2532"}}>{VERSICHERER[vPreview]?.name} — Website Template</span>
+              <div style={{width:10,height:10,borderRadius:"50%",background:"#2563eb"}}/>
+              <span style={{fontWeight:700,fontSize:14,color:"#1e2532"}}>{WEBSITE_TEMPLATES.find(t=>t.folder===vPreview)?.label} — Website Template</span>
             </div>
             <div style={{display:"flex",gap:8}}>
-              <a href={versichererUrls[vPreview]} target="_blank" rel="noreferrer" style={{...S.btn(),textDecoration:"none",fontSize:12}}>↗ Neu öffnen</a>
+              <a href={`/templates/${vPreview}/index.html`} target="_blank" rel="noreferrer" style={{...S.btn(),textDecoration:"none",fontSize:12}}>↗ Neu öffnen</a>
               <button style={S.btn("ghost")} onClick={()=>setVPreview(null)}>✕ Schließen</button>
             </div>
           </div>
-          {versichererUrls[vPreview]?<iframe src={versichererUrls[vPreview]} style={{flex:1,border:"none"}} title="Website Preview"/>:<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",background:"#f4f6f9",color:"#64748b",fontSize:14}}>Noch keine URL für {VERSICHERER[vPreview]?.name} eingetragen.</div>}
+          <iframe src={`/templates/${vPreview}/index.html`} style={{flex:1,border:"none"}} title="Website Preview"/>
         </div>
       )}
 
@@ -716,24 +729,18 @@ export default function App() {
               );
             })()}
 
-            {/* ── WEBSITE TEMPLATES PRO VERSICHERER ── */}
+            {/* ── WEBSITE TEMPLATES GALERIE ── */}
             <div style={S.card}>
-              <div style={{fontSize:14,fontWeight:700,color:"#1e2532",marginBottom:4}}>🌐 Website-Templates pro Versicherer</div>
-              <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>URL der Demo-Website eintragen — beim Lead-Click direkt vorschauen</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#1e2532",marginBottom:4}}>🌐 Website-Templates</div>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>Fertige Websites — direkt im Tool vorschauen</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                {Object.values(VERSICHERER).map(v=>(
-                  <div key={v.id} style={{background:"#f8fafc",borderRadius:10,padding:"12px 14px",border:"1px solid #e2e8f0"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:v.primary,flexShrink:0}}/>
-                      <span style={{fontWeight:700,fontSize:13,color:"#1e2532"}}>{v.name}</span>
-                      {versichererUrls[v.id]&&<button style={{...S.btn("blue"),padding:"3px 10px",fontSize:11,marginLeft:"auto"}} onClick={()=>setVPreview(v.id)}>👁 Vorschau</button>}
+                {WEBSITE_TEMPLATES.map(t=>(
+                  <div key={t.folder} style={{background:"#f8fafc",borderRadius:10,padding:"12px 14px",border:"1px solid #e2e8f0",display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,fontSize:13,color:"#1e2532",marginBottom:2}}>{t.label}</div>
+                      <div style={{fontSize:11,color:"#64748b"}}>{t.tag}</div>
                     </div>
-                    <input
-                      value={versichererUrls[v.id]||""}
-                      onChange={e=>saveVUrl(v.id,e.target.value)}
-                      placeholder="https://name-versicherer.vercel.app"
-                      style={{...S.inp(false),fontSize:12,padding:"7px 10px"}}
-                    />
+                    <button style={{...S.btn(),padding:"6px 14px",fontSize:12,flexShrink:0}} onClick={()=>setVPreview(t.folder)}>👁 Ansehen</button>
                   </div>
                 ))}
               </div>
