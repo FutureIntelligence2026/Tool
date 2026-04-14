@@ -331,7 +331,11 @@ const S = {
     fontSize:v==="sm"?12:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",letterSpacing:"normal",
     boxShadow:v==="pri"?"0 1px 3px rgba(37,99,235,0.3)":"none",transition:"opacity .15s",
   }),
-  stepDot:(status,color)=>({width:22,height:22,borderRadius:"50%",flexShrink:0,background:status==="sent"?"#16a34a":status==="stopped"?"#f1f5f9":status==="scheduled"?`${color}18`:"#f8fafc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:status==="sent"?"#fff":status==="stopped"?"#94a3b8":color||"#2563eb",border:status==="scheduled"?`2px solid ${color}`:status==="sent"?"2px solid #16a34a":"1.5px solid #e2e8f0"}),
+  stepDot:(status,color)=>({width:22,height:22,borderRadius:"50%",flexShrink:0,
+    background:status==="sent"?"#16a34a":status==="failed"?"#ef4444":status==="stopped"?"#f1f5f9":status==="scheduled"?`${color}18`:"#1e2a1e",
+    display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,
+    color:status==="sent"?"#fff":status==="failed"?"#fff":status==="stopped"?"#94a3b8":status==="pending"?"#4ade80":color||"#2563eb",
+    border:status==="scheduled"?`2px solid ${color}`:status==="sent"?"2px solid #16a34a":status==="failed"?"2px solid #ef4444":status==="pending"?"2px solid #4ade80":"1.5px solid #e2e8f0"}),
   pill: (c)=>({background:`${c}18`,border:`1px solid ${c}40`,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600,color:c}),
   statPill:{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"8px 16px",textAlign:"center"},
 };
@@ -471,8 +475,18 @@ export default function App() {
                 const done=s2.every(s=>s.status==="sent"||s.status==="stopped");
                 return{...l,sequence:s2,status:done?"completed":l.status};
               }));
+            }else{
+              setLeads(p=>p.map(l=>{
+                if(l.id!==lead.id)return l;
+                return{...l,sequence:l.sequence.map(s=>s.step===seq.step?{...s,status:"failed",failedAt:new Date(),failReason:data.error||"Unbekannter Fehler"}:s)};
+              }));
             }
-          }catch(e){}
+          }catch(e){
+            setLeads(p=>p.map(l=>{
+              if(l.id!==lead.id)return l;
+              return{...l,sequence:l.sequence.map(s=>s.step===seq.step?{...s,status:"failed",failedAt:new Date(),failReason:e?.message||"Netzwerkfehler"}:s)};
+            }));
+          }
         }
       }
     };
@@ -496,6 +510,9 @@ export default function App() {
     total:leads.length,active:leads.filter(l=>l.status==="active").length,
     replied:leads.filter(l=>l.status==="replied").length,
     today:allSteps.filter(s=>s.scheduledAt&&new Date(s.scheduledAt).toDateString()===todayStr).length,
+    sent:allSteps.filter(s=>s.status==="sent").length,
+    failed:allSteps.filter(s=>s.status==="failed").length,
+    pending:allSteps.filter(s=>s.status==="pending"||s.status==="scheduled").length,
     next:leads.filter(l=>l.status==="active").flatMap(l=>(l.sequence||[]).filter(s=>s.status==="scheduled").map(s=>({...s,name:`${l.lead.vorname} ${l.lead.nachname}`}))).sort((a,b)=>new Date(a.scheduledAt)-new Date(b.scheduledAt))[0],
   };
 
@@ -817,7 +834,7 @@ export default function App() {
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            {[{l:"Leads",v:stats.total,c:IC.white},{l:"Aktiv",v:stats.active,c:"#3b82f6"},{l:"Heute",v:stats.today,c:IC.gold},{l:"Geantw.",v:stats.replied,c:"#10b981"}].map(s=>(
+            {[{l:"Leads",v:stats.total,c:IC.white},{l:"Aktiv",v:stats.active,c:"#3b82f6"},{l:"Pending",v:stats.pending,c:IC.gold},{l:"Gesendet",v:stats.sent,c:"#10b981"},{l:"Failed",v:stats.failed,c:"#ef4444"},{l:"Geantw.",v:stats.replied,c:"#a78bfa"}].map(s=>(
               <div key={s.l} style={S.statPill}><div style={{fontSize:15,fontWeight:700,color:s.c,lineHeight:1}}>{s.v}</div><div style={{fontSize:8,color:"#3a3830",textTransform:"uppercase",letterSpacing:"0.07em",marginTop:2}}>{s.l}</div></div>
             ))}
             <button style={{...S.btn(trackerStatus==="checking"?"ghost":"green"),display:"flex",alignItems:"center",gap:5}} onClick={checkReplies} disabled={trackerStatus==="checking"}>
@@ -893,7 +910,7 @@ export default function App() {
                       <div style={{display:"flex",alignItems:"center",gap:4,marginTop:1}}><VDot id={lead.insurer} sz={4}/><span style={{fontSize:9,color:cfg?.primary,fontWeight:600}}>{cfg?.name}</span><span style={{fontSize:9,color:"#3a3830"}}>· {lead.lead.ort} · {lead.lead.email}</span></div>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:3}}>
-                      {lead.sequence?.map(s=>{const def=templates.find(t=>t.step===s.step);return<div key={s.step} style={S.stepDot(s.status,def?.tagColor)}>{s.status==="sent"?"✓":s.status==="stopped"?"–":s.step}</div>;})}
+                      {lead.sequence?.map(s=>{const def=templates.find(t=>t.step===s.step);return<div key={s.step} title={s.status==="failed"?s.failReason:undefined} style={S.stepDot(s.status,def?.tagColor)}>{s.status==="sent"?"✓":s.status==="failed"?"✕":s.status==="stopped"?"–":s.status==="pending"?"·":s.step}</div>;})}
                       <span style={{fontSize:8,color:"#3a3830",marginLeft:2}}>{sentCount}/5</span>
                     </div>
                     {lead.status==="active"&&(()=>{const ns=lead.sequence?.find(s=>s.status==="scheduled");if(!ns)return null;return<div style={{fontSize:8,textAlign:"right",minWidth:65}}><div style={{color:IC.gold,fontWeight:700}}>{new Date(ns.scheduledAt).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})} {new Date(ns.scheduledAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</div><div style={{color:accColor(ns.accountId),marginTop:1,fontSize:7}}>{accounts.find(a=>a.id===ns.accountId)?.email?.split("@")[0]||"?"}</div></div>;})()}
@@ -936,7 +953,7 @@ export default function App() {
                         return(
                           <div key={seq.step} style={{borderBottom:"1px solid #1a1a12",opacity:seq.status==="stopped"?0.3:1}}>
                             <div style={{padding:"7px 14px",display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                              <div style={S.stepDot(seq.status,def?.tagColor)}>{seq.status==="sent"?"✓":seq.status==="stopped"?"–":seq.step}</div>
+                              <div style={S.stepDot(seq.status,def?.tagColor)} title={seq.status==="failed"?seq.failReason:undefined}>{seq.status==="sent"?"✓":seq.status==="failed"?"✕":seq.status==="stopped"?"–":seq.status==="pending"?"·":seq.step}</div>
                               <div style={{flex:1,minWidth:100}}>
                                 <div style={{display:"flex",alignItems:"center",gap:5}}>
                                   <span style={{fontSize:10,fontWeight:600,color:IC.white}}>{def?.label}</span>
@@ -945,12 +962,17 @@ export default function App() {
                                 </div>
                                 <div style={{fontSize:8,color:"#3a3830",marginTop:1,fontStyle:"italic"}}>{mail.subject.slice(0,55)}…</div>
                               </div>
-                              {seq.scheduledAt&&<div style={{fontSize:8,color:seq.status==="sent"?"#10b981":seq.status==="stopped"?"#2a2a20":IC.gold}}>{seq.status==="sent"?"✓ Gesendet":seq.status==="stopped"?"Gestoppt":"Geplant"}: {new Date(seq.scheduledAt).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})} {new Date(seq.scheduledAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</div>}
+                              {seq.status==="pending"&&<div style={{fontSize:8,background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.3)",borderRadius:8,padding:"2px 7px",color:"#4ade80",fontWeight:700}}>Pending</div>}
+                              {seq.status==="failed"&&<div style={{fontSize:8,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:8,padding:"2px 7px",color:"#f87171",fontWeight:700}} title={seq.failReason}>✕ Failed</div>}
+                              {seq.scheduledAt&&seq.status==="scheduled"&&<div style={{fontSize:8,color:IC.gold}}>Pending: {new Date(seq.scheduledAt).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})} {new Date(seq.scheduledAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</div>}
+                              {seq.scheduledAt&&seq.status==="sent"&&<div style={{fontSize:8,color:"#10b981",fontWeight:700}}>✓ Gesendet: {new Date(seq.sentAt||seq.scheduledAt).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})} {new Date(seq.sentAt||seq.scheduledAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</div>}
+                              {seq.status==="stopped"&&<div style={{fontSize:8,color:"#2a2a20"}}>Gestoppt</div>}
                               {acc&&<div style={{fontSize:7,color:accColor(acc.id)}}>via {acc.email.split("@")[0]}</div>}
                               <div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
                                 <button style={S.btn("sm")} onClick={()=>setShowMailPreview({lead,step:seq.step})}>👁</button>
                                 <button style={{...S.btn("sm"),color:IC.gold}} onClick={()=>setExpandStep(isExpS?null:`${lead.id}-${seq.step}`)}>✏</button>
-                                {seq.status==="scheduled"&&lead.status==="active"&&<button style={{...S.btn("sm"),background:"rgba(16,185,129,0.1)",color:"#34d399",border:"1px solid rgba(16,185,129,0.15)"}} onClick={()=>markStepSent(lead.id,seq.step)}>✓</button>}
+                                {(seq.status==="scheduled"||seq.status==="pending")&&lead.status==="active"&&<button style={{...S.btn("sm"),background:"rgba(16,185,129,0.1)",color:"#34d399",border:"1px solid rgba(16,185,129,0.15)"}} onClick={()=>markStepSent(lead.id,seq.step)}>✓</button>}
+                                {seq.status==="failed"&&<button style={{...S.btn("sm"),background:"rgba(239,68,68,0.1)",color:"#f87171",border:"1px solid rgba(239,68,68,0.2)"}} onClick={()=>setLeads(p=>p.map(l=>l.id!==lead.id?l:{...l,sequence:l.sequence.map(s=>s.step===seq.step?{...s,status:"scheduled",failedAt:null,failReason:null}:s)}))}>↺ Retry</button>}
                               </div>
                             </div>
                             {isExpS&&<MailStepEditor mail={mail} hasOv={hasOv} lead={lead} step={seq.step} templates={templates} onSave={(s,b)=>{setMailOverride(lead.id,seq.step,"subject",s);setMailOverride(lead.id,seq.step,"body",b);setExpandStep(null);}} onClear={()=>clearOverride(lead.id,seq.step)} S={S} IC={IC}/>}
