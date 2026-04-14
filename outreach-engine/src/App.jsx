@@ -31,27 +31,27 @@ const IC = {
 // SIGNATUR HTML — erscheint am Ende jeder Mail
 // ═══════════════════════════════════════════════════════════════════════════
 const SIGNATUR_HTML = `
-<div style="margin-top:28px;padding-top:20px;border-top:1px solid #2a2a2a;font-family:Arial,sans-serif">
-  <table cellpadding="0" cellspacing="0" border="0">
+<div style="margin-top:32px;padding-top:20px;border-top:3px solid #f97316;font-family:Arial,sans-serif;max-width:480px">
+  <table cellpadding="0" cellspacing="0" border="0" width="100%">
     <tr>
-      <td style="padding-right:16px;vertical-align:top">
-        <img src="${IC.achiFace}" alt="Achi Schmidt" width="64" height="64"
-          style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;border:2px solid #c9a84c"/>
+      <td style="padding-right:14px;vertical-align:middle;width:68px">
+        <img src="${IC.achiFace}" alt="Achi Schmidt" width="60" height="60"
+          style="width:60px;height:60px;border-radius:50%;object-fit:cover;display:block;border:2px solid #f97316"/>
       </td>
-      <td style="vertical-align:top">
-        <div style="font-size:15px;font-weight:700;color:#f5f0e8;margin-bottom:2px">${IC.name}</div>
-        <div style="font-size:12px;color:#c9a84c;margin-bottom:8px;font-style:italic">${IC.title}</div>
-        <div style="font-size:12px;color:#888880;line-height:1.8">
-          <a href="${IC.telLink}" style="color:#c9a84c;text-decoration:none">📞 ${IC.tel}</a><br/>
-          <a href="mailto:${IC.email}" style="color:#c9a84c;text-decoration:none">✉ ${IC.email}</a><br/>
-          <a href="${IC.url}" style="color:#c9a84c;text-decoration:none">🌐 iconicone.de</a>
+      <td style="vertical-align:middle">
+        <div style="font-size:16px;font-weight:700;color:#f97316;margin-bottom:1px;letter-spacing:0.01em">${IC.name}</div>
+        <div style="font-size:12px;color:#555;margin-bottom:6px;font-style:italic">${IC.title} · ICONICONE</div>
+        <div style="font-size:12px;color:#333;line-height:1.9">
+          <a href="${IC.telLink}" style="color:#f97316;text-decoration:none;font-weight:600">📞 ${IC.tel}</a><br/>
+          <a href="mailto:${IC.email}" style="color:#f97316;text-decoration:none;font-weight:600">✉ ${IC.email}</a><br/>
+          <a href="${IC.url}" style="color:#f97316;text-decoration:none;font-weight:600">🌐 www.iconicone.de</a>
         </div>
       </td>
-    </tr>
-    <tr>
-      <td colspan="2" style="padding-top:12px">
-        <img src="${IC.logo}" alt="ICONICONE" height="28"
-          style="height:28px;display:block;opacity:0.85"/>
+      <td style="vertical-align:middle;padding-left:14px;text-align:right">
+        <a href="${IC.url}" style="text-decoration:none">
+          <img src="${IC.logo}" alt="ICONICONE" height="26"
+            style="height:26px;display:block;"/>
+        </a>
       </td>
     </tr>
   </table>
@@ -197,9 +197,27 @@ function interpolate(text, lead, insurerName, previewUrl) {
     .replace(/\{\{SIGNATUR\}\}/g,    SIGNATUR_TEXT);
 }
 
+function textToHtml(text) {
+  // Convert plain text with \n\n paragraphs to email-safe HTML
+  const escaped = text
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const paragraphs = escaped.split(/\n{2,}/);
+  const htmlParts = paragraphs.map(p => {
+    const lines = p.split("\n").join("<br/>");
+    return `<p style="margin:0 0 14px 0;line-height:1.7;color:#1a1a1a;font-size:15px;font-family:Arial,sans-serif">${lines}</p>`;
+  });
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.7;max-width:560px">${htmlParts.join("")}</div>`;
+}
+
 function interpolateHtml(text, lead, insurerName, previewUrl) {
-  return interpolate(text, lead, insurerName, previewUrl)
-    .replace(SIGNATUR_TEXT, SIGNATUR_HTML);
+  const interpolated = interpolate(text, lead, insurerName, previewUrl);
+  // Split on signature, convert body to HTML, append HTML signature
+  const sigIdx = interpolated.indexOf(SIGNATUR_TEXT);
+  if (sigIdx >= 0) {
+    const bodyText = interpolated.slice(0, sigIdx).trim();
+    return textToHtml(bodyText) + SIGNATUR_HTML;
+  }
+  return textToHtml(interpolated);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -862,20 +880,20 @@ export default function App() {
             </div>
             {/* Signatur Vorschau */}
             <div style={S.card}>
-              <div style={{fontSize:10,color:IC.gold,fontWeight:700,marginBottom:12}}>Signatur-Vorschau (automatisch in jeder Mail)</div>
-              <div style={{background:"#0a0a08",borderRadius:8,padding:"16px",border:`1px solid #1e1e14`}}>
-                <div style={{borderTop:`1px solid #2a2a1a`,paddingTop:14,display:"flex",alignItems:"center",gap:12}}>
-                  <img src={IC.achiFace} alt="" style={{width:52,height:52,borderRadius:"50%",objectFit:"cover",border:`2px solid ${IC.gold}`}} onError={e=>e.target.style.display="none"}/>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:700,color:IC.white}}>{IC.name}</div>
-                    <div style={{fontSize:10,color:IC.gold,fontStyle:"italic",marginBottom:6}}>{IC.title}</div>
-                    <div style={{fontSize:10,color:IC.muted,lineHeight:1.8}}>
-                      <span style={{color:IC.gold}}>📞</span> {IC.tel}&nbsp;&nbsp;
-                      <span style={{color:IC.gold}}>✉</span> {IC.email}&nbsp;&nbsp;
-                      <span style={{color:IC.gold}}>🌐</span> iconicone.de
+              <div style={{fontSize:10,color:"#f97316",fontWeight:700,marginBottom:12}}>Signatur-Vorschau (automatisch in jeder Mail)</div>
+              <div style={{background:"#fff",borderRadius:8,padding:"16px 20px",border:"3px solid #f97316",borderTop:"3px solid #f97316",maxWidth:480}}>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <img src={IC.achiFace} alt="" style={{width:52,height:52,borderRadius:"50%",objectFit:"cover",border:"2px solid #f97316",flexShrink:0}} onError={e=>e.target.style.display="none"}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#f97316"}}>{IC.name}</div>
+                    <div style={{fontSize:11,color:"#555",fontStyle:"italic",marginBottom:5}}>{IC.title} · ICONICONE</div>
+                    <div style={{fontSize:11,color:"#333",lineHeight:1.9}}>
+                      <a href={IC.telLink} style={{color:"#f97316",fontWeight:600,textDecoration:"none"}}>📞 {IC.tel}</a><br/>
+                      <a href={`mailto:${IC.email}`} style={{color:"#f97316",fontWeight:600,textDecoration:"none"}}>✉ {IC.email}</a><br/>
+                      <a href={IC.url} style={{color:"#f97316",fontWeight:600,textDecoration:"none"}}>🌐 www.iconicone.de</a>
                     </div>
                   </div>
-                  <img src={IC.logo} alt="ICONICONE" style={{height:24,marginLeft:"auto",opacity:0.75}} onError={e=>e.target.style.display="none"}/>
+                  <a href={IC.url}><img src={IC.logo} alt="ICONICONE" style={{height:22,opacity:0.9}} onError={e=>e.target.style.display="none"}/></a>
                 </div>
               </div>
             </div>
