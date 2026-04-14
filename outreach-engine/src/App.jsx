@@ -507,7 +507,14 @@ export default function App() {
 
   const makeLead=(ld,insId)=>({id:Date.now()+Math.random(),lead:{...ld},insurer:insId,previewUrl:generatePreviewUrl(ld,insId),status:"active",sequence:scheduleSequence(ld,new Date(),activeAccounts,templates),createdAt:new Date(),repliedAt:null,mailOverrides:{}});
   const validateLead=l=>{const e={};["vorname","nachname","email","telefon","ort"].forEach(k=>{if(!l[k]?.trim())e[k]=true;});setFormErrors(e);return!Object.keys(e).length;};
-  const addSingle=async()=>{if(!validateLead(leadForm))return;const nl=makeLead(leadForm,selIns);const su=await shortenUrl(nl.previewUrl,makeAlias(leadForm,selIns));setLeads(p=>[...p,{...nl,previewUrl:su}]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");};
+  const findDup=(email)=>leads.find(l=>l.lead.email?.toLowerCase()===email?.toLowerCase());
+  const addSingle=async()=>{
+    if(!validateLead(leadForm))return;
+    const dup=findDup(leadForm.email);
+    if(dup){setDupModal([{existing:dup,newLead:null,form:leadForm,insId:selIns}]);return;}
+    const nl=makeLead(leadForm,selIns);const su=await shortenUrl(nl.previewUrl,makeAlias(leadForm,selIns));
+    setLeads(p=>[...p,{...nl,previewUrl:su}]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");
+  };
   const importCSV=async()=>{
     const lines=csvText.trim().split("\n").filter(Boolean).slice(1);const log=[];
     const nl=lines.map((line)=>{
@@ -520,7 +527,11 @@ export default function App() {
       return makeLead(ld,det);
     }).filter(Boolean);
     const shortened=await Promise.all(nl.map(async l=>({...l,previewUrl:await shortenUrl(l.previewUrl,makeAlias(l.lead,l.insurer))})));
-    setLeads(p=>[...p,...shortened]);setDetectLog(log);setCsvText("");setTab("leads");
+    const dups=shortened.filter(nl=>leads.some(l=>l.lead.email?.toLowerCase()===nl.lead.email?.toLowerCase()));
+    const clean=shortened.filter(nl=>!leads.some(l=>l.lead.email?.toLowerCase()===nl.lead.email?.toLowerCase()));
+    setLeads(p=>[...p,...clean]);
+    if(dups.length)setDupModal(dups.map(nl=>({existing:leads.find(l=>l.lead.email?.toLowerCase()===nl.lead.email?.toLowerCase()),newLead:nl})));
+    setDetectLog(log);setCsvText("");setTab("leads");
   };
 
   const markReplied=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:"replied",repliedAt:new Date(),sequence:l.sequence.map(s=>s.status==="scheduled"?{...s,status:"stopped"}:s)}));
@@ -627,6 +638,7 @@ export default function App() {
   };
 
   const [testSmtpPass,setTestSmtpPass]=useState("");
+  const [dupModal,setDupModal]=useState(null); // [{existing, newLead}]
 
   const buildDemoMail=async(step,insId)=>{
     const demoData={vorname:"Max",nachname:"Mustermann",email:testMailTo||"test@example.de",ort:"Berlin"};
@@ -692,6 +704,44 @@ export default function App() {
             <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}>
               <button style={S.btn("ghost")} onClick={()=>{setEditLeadId(null);setEditLeadForm(null);}}>Abbrechen</button>
               <button style={S.btn()} onClick={saveEditLead}>💾 Speichern</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DUPLIKAT MODAL */}
+      {dupModal&&(
+        <div style={{position:"fixed",inset:0,zIndex:2100,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"#fff",borderRadius:16,padding:28,maxWidth:520,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",maxHeight:"80vh",overflowY:"auto"}}>
+            <div style={{fontSize:16,fontWeight:700,color:"#1e2532",marginBottom:4}}>⚠ Duplikat{dupModal.length>1?"e":""} gefunden</div>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>{dupModal.length} Lead{dupModal.length>1?"s":""} mit dieser E-Mail {dupModal.length>1?"existieren":"existiert"} bereits.</div>
+            {dupModal.map((d,i)=>{
+              const ex=d.existing;
+              const nw=d.newLead;
+              const cfg=VERSICHERER[ex?.insurer];
+              return(
+                <div key={i} style={{background:"#f8fafc",borderRadius:10,padding:"14px 16px",marginBottom:10,border:"1.5px solid #fbbf24"}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:6}}>📧 {ex?.lead?.email}</div>
+                  <div style={{fontSize:11,color:"#1e2532",marginBottom:2}}><strong>Bestehend:</strong> {ex?.lead?.vorname} {ex?.lead?.nachname} · {cfg?.name||ex?.insurer} · {ex?.lead?.ort}</div>
+                  {nw&&<div style={{fontSize:11,color:"#475569",marginBottom:8}}><strong>Neu:</strong> {nw?.lead?.vorname} {nw?.lead?.nachname} · {VERSICHERER[nw?.insurer]?.name||nw?.insurer} · {nw?.lead?.ort}</div>}
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap",marginTop:8}}>
+                    <button style={{...S.btn("ghost"),fontSize:11,padding:"5px 10px"}} onClick={()=>{startEditLead(ex);setDupModal(null);}}>✏ Bearbeiten</button>
+                    {nw&&<button style={{...S.btn("blue"),fontSize:11,padding:"5px 10px"}} onClick={async()=>{
+                      setLeads(p=>p.map(l=>l.id===ex.id?{...ex,...nw,id:ex.id}:l));
+                      setDupModal(p=>{const r=p.filter((_,j)=>j!==i);return r.length?r:null;});
+                    }}>🔄 Ersetzen</button>}
+                    {(nw||d.form)&&<button style={{...S.btn(),fontSize:11,padding:"5px 10px",background:"rgba(16,185,129,0.1)",color:"#059669",border:"1px solid rgba(16,185,129,0.2)"}} onClick={async()=>{
+                      if(nw){setLeads(p=>[...p,nw]);}
+                      else if(d.form){const nl=makeLead(d.form,d.insId);const su=await shortenUrl(nl.previewUrl,makeAlias(d.form,d.insId));setLeads(p=>[...p,{...nl,previewUrl:su}]);setLeadForm(EMPTY_LEAD);setFormErrors({});}
+                      setDupModal(p=>{const r=p.filter((_,j)=>j!==i);return r.length?r:null;});
+                    }}>+ Trotzdem hinzufügen</button>}
+                    <button style={{...S.btn("ghost"),fontSize:11,padding:"5px 10px",color:"#ef4444"}} onClick={()=>{removeLead(ex.id);setDupModal(p=>{const r=p.filter((_,j)=>j!==i);return r.length?r:null;});}}>🗑 Löschen</button>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{display:"flex",justifyContent:"flex-end",marginTop:12}}>
+              <button style={S.btn("ghost")} onClick={()=>setDupModal(null)}>Schließen</button>
             </div>
           </div>
         </div>
