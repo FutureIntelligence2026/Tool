@@ -297,12 +297,12 @@ function scheduleSequence(lead, startDate, accounts, seqDef) {
 // ═══════════════════════════════════════════════════════════════════════════
 const DKW={signal_iduna:["signal iduna","signal-iduna","signaliduna"],arag:["arag"],huk:["huk","huk-coburg","hukcoburg"],allianz:["allianz"],generali:["generali"],zurich:["zurich","zürich"]};
 function detectIns(str){if(!str)return null;const l=str.toLowerCase();for(const[id,kws]of Object.entries(DKW))if(kws.some(k=>l.includes(k)))return id;return null;}
-function detectFromRow(parts){return detectIns(parts[9]||"")||detectIns(parts[2]||"")||null;}
+function detectFromRow(parts){return detectIns(parts[7]||"")||detectIns(parts[2]||"")||null;}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
-const EMPTY_LEAD={vorname:"",nachname:"",email:"",telefon:"",strasse:"",plz:"",ort:"",jahre:"10",kunden:"200"};
+const EMPTY_LEAD={vorname:"",nachname:"",email:"",telefon:"",strasse:"",plz:"",ort:""};
 const EMPTY_ACC={name:"",email:"",password:"",smtpHost:"smtp.strato.de",smtpPort:"465",imapHost:"imap.strato.de",imapPort:"993"};
 const ACC_COLORS=[IC.gold,"#3b82f6","#10b981","#a855f7","#f97316","#06b6d4","#ec4899","#84cc16"];
 const LSC={active:"#3b82f6",replied:"#10b981",completed:"#6b7280",stopped:"#ef4444",archived:"#94a3b8"};
@@ -512,9 +512,9 @@ export default function App() {
     const lines=csvText.trim().split("\n").filter(Boolean).slice(1);const log=[];
     const nl=lines.map((line)=>{
       const parts=line.split(";").map(s=>s?.trim());
-      const[vorname,nachname,email,telefon,strasse,plz,ort,jahre,kunden]=parts;
+      const[vorname,nachname,email,telefon,strasse,plz,ort]=parts;
       if(!vorname||!email)return null;
-      const ld={vorname,nachname,email,telefon:telefon||"",strasse:strasse||"",plz:plz||"",ort:ort||"",jahre:jahre||"10",kunden:kunden||"200"};
+      const ld={vorname,nachname,email,telefon:telefon||"",strasse:strasse||"",plz:plz||"",ort:ort||""};
       const det=detectFromRow(parts)||selIns;
       log.push({name:`${vorname} ${nachname}`,ins:VERSICHERER[det]?.name,auto:!!detectFromRow(parts)});
       return makeLead(ld,det);
@@ -682,7 +682,7 @@ export default function App() {
           <div style={{background:"#fff",borderRadius:16,padding:28,maxWidth:520,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
             <div style={{fontSize:15,fontWeight:700,color:"#1e2532",marginBottom:16}}>✏ Lead bearbeiten</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-              {[{k:"vorname",l:"Vorname"},{k:"nachname",l:"Nachname"},{k:"email",l:"E-Mail",f:true},{k:"telefon",l:"Telefon"},{k:"strasse",l:"Straße",f:true},{k:"plz",l:"PLZ"},{k:"ort",l:"Ort"},{k:"jahre",l:"Jahre"},{k:"kunden",l:"Kunden"}].map(f=>(
+              {[{k:"vorname",l:"Vorname"},{k:"nachname",l:"Nachname"},{k:"email",l:"E-Mail",f:true},{k:"telefon",l:"Telefon"},{k:"strasse",l:"Straße",f:true},{k:"plz",l:"PLZ"},{k:"ort",l:"Ort"}].map(f=>(
                 <div key={f.k} style={{gridColumn:f.f?"1/-1":"auto"}}>
                   <label style={S.lbl}>{f.l}</label>
                   <input value={editLeadForm[f.k]||""} onChange={e=>setEditLeadForm(p=>({...p,[f.k]:e.target.value}))} style={S.inp(false)} onFocus={e=>e.target.style.borderColor="#2563eb"} onBlur={e=>e.target.style.borderColor="#cbd5e1"}/>
@@ -1004,7 +1004,7 @@ export default function App() {
             {addMode==="single"?(
               <div style={S.card}>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                  {[{k:"vorname",l:"Vorname",p:"Thomas"},{k:"nachname",l:"Nachname",p:"Müller"},{k:"email",l:"E-Mail Lead",p:"t.mueller@example.de",f:true},{k:"telefon",l:"Telefon",p:"089 123456"},{k:"strasse",l:"Straße",p:"Hauptstraße 12",f:true},{k:"plz",l:"PLZ",p:"80331"},{k:"ort",l:"Ort",p:"München"},{k:"jahre",l:"Jahre",p:"10"},{k:"kunden",l:"Kunden",p:"200"}].map(f=>(
+                  {[{k:"vorname",l:"Vorname",p:"Thomas"},{k:"nachname",l:"Nachname",p:"Müller"},{k:"email",l:"E-Mail Lead",p:"t.mueller@example.de",f:true},{k:"telefon",l:"Telefon",p:"089 123456"},{k:"strasse",l:"Straße",p:"Hauptstraße 12",f:true},{k:"plz",l:"PLZ",p:"80331"},{k:"ort",l:"Ort",p:"München"}].map(f=>(
                     <div key={f.k} style={{gridColumn:f.f?"1/-1":"auto"}}>
                       <label style={S.lbl}>{f.l}{formErrors[f.k]&&<span style={{color:"#ef4444"}}> *</span>}</label>
                       <input value={leadForm[f.k]||""} onChange={e=>{setLeadForm(p=>({...p,[f.k]:e.target.value}));setFormErrors(p=>({...p,[f.k]:false}));}} placeholder={f.p} style={S.inp(formErrors[f.k])} onFocus={e=>e.target.style.borderColor=IC.gold} onBlur={e=>e.target.style.borderColor=formErrors[f.k]?"#ef4444":"#1e1e14"}/>
@@ -1015,11 +1015,11 @@ export default function App() {
               </div>
             ):(
               <div style={S.card}>
-                <div style={{fontSize:9,color:IC.muted,marginBottom:7,lineHeight:1.6}}>Format: <code style={{color:IC.gold,fontSize:8}}>Vorname;Nachname;Email;Telefon;Strasse;PLZ;Ort;Jahre;Kunden;Versicherer</code></div>
-                <textarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder={"Vorname;Nachname;Email;...;Versicherer\nThomas;Müller;t.mueller@example.de;089 123;Hauptstr 1;80331;München;12;300;SIGNAL IDUNA"} style={{...S.ta,minHeight:110}}/>
+                <div style={{fontSize:9,color:IC.muted,marginBottom:7,lineHeight:1.6}}>Format: <code style={{color:IC.gold,fontSize:8}}>Vorname;Nachname;Email;Telefon;Strasse;PLZ;Ort;Versicherer</code></div>
+                <textarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder={"Vorname;Nachname;Email;...;Versicherer\nThomas;Müller;t.mueller@example.de;089 123;Hauptstr 1;80331;München;SIGNAL IDUNA"} style={{...S.ta,minHeight:110}}/>
                 <div style={{display:"flex",gap:6,marginTop:9}}>
                   <button style={S.btn()} onClick={importCSV} disabled={!csvText.trim()}>📥 {Math.max(0,csvText.trim().split("\n").length-1)} Leads importieren</button>
-                  <button style={S.btn("ghost")} onClick={()=>setCsvText("Vorname;Nachname;Email;Telefon;Strasse;PLZ;Ort;Jahre;Kunden;Versicherer\nThomas;Müller;t.mueller@example.de;089 123456;Hauptstr 1;80331;München;12;300;SIGNAL IDUNA\nAnna;Schmidt;a.schmidt@example.de;030 456789;Berliner Str 5;10115;Berlin;8;180;ARAG")}>Demo</button>
+                  <button style={S.btn("ghost")} onClick={()=>setCsvText("Vorname;Nachname;Email;Telefon;Strasse;PLZ;Ort;Versicherer\nThomas;Müller;t.mueller@example.de;089 123456;Hauptstr 1;80331;München;SIGNAL IDUNA\nAnna;Schmidt;a.schmidt@example.de;030 456789;Berliner Str 5;10115;Berlin;ARAG")}>Demo</button>
                 </div>
               </div>
             )}
