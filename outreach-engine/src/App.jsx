@@ -674,43 +674,25 @@ export default function App() {
     const{lead,step}=showMailPreview;
     const mail=getEffectiveMail(lead,step);
     return(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowMailPreview(null)}>
-        <div style={{background:"#111108",border:`1px solid ${IC.goldDark}44`,borderRadius:16,width:"100%",maxWidth:620,maxHeight:"85vh",overflow:"hidden",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowMailPreview(null)}>
+        <div style={{background:"#ffffff",borderRadius:12,width:"100%",maxWidth:640,maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"}} onClick={e=>e.stopPropagation()}>
           {/* Modal Header */}
-          <div style={{padding:"14px 18px",borderBottom:`1px solid #1e1e14`,display:"flex",alignItems:"center",justifyContent:"space-between",background:"#0d0d0b"}}>
+          <div style={{padding:"12px 18px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between",background:"#f8fafc"}}>
             <div>
-              <div style={{fontSize:12,fontWeight:700,color:IC.white}}>Mail {step} Vorschau</div>
-              <div style={{fontSize:10,color:IC.muted,marginTop:1}}>{lead.lead.vorname} {lead.lead.nachname} · {VERSICHERER[lead.insurer]?.name}</div>
+              <div style={{fontSize:12,fontWeight:700,color:"#1e2532"}}>Mail {step} — Vorschau (exakt wie Empfänger es sieht)</div>
+              <div style={{fontSize:11,color:"#64748b",marginTop:2}}>An: <b>{lead.lead.email}</b> &nbsp;·&nbsp; Betreff: <b>{mail.subject}</b></div>
             </div>
-            <button style={{background:"none",border:"none",color:IC.muted,cursor:"pointer",fontSize:18,lineHeight:1}} onClick={()=>setShowMailPreview(null)}>✕</button>
+            <button style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:20,lineHeight:1}} onClick={()=>setShowMailPreview(null)}>✕</button>
           </div>
-          {/* Mail Info */}
-          <div style={{padding:"10px 18px",borderBottom:`1px solid #1e1e14`,display:"flex",gap:14,flexWrap:"wrap",background:"#0a0a08"}}>
-            <div><span style={{fontSize:9,color:"#3a3830",textTransform:"uppercase"}}>Betreff  </span><span style={{fontSize:11,color:"#7db3f0",fontWeight:600}}>{mail.subject}</span></div>
-            <div><span style={{fontSize:9,color:"#3a3830",textTransform:"uppercase"}}>An  </span><span style={{fontSize:11,color:IC.white}}>{lead.lead.email}</span></div>
-          </div>
-          {/* Mail Body */}
-          <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
-            {/* Signatur Preview */}
-            <pre style={{fontSize:11,color:"#8a8070",lineHeight:1.75,whiteSpace:"pre-wrap",margin:0,fontFamily:"Arial,sans-serif"}}>
-              {mail.body.replace(SIGNATUR_TEXT,"")}
-            </pre>
-            {/* Achi Signatur visuell */}
-            <div style={{marginTop:20,paddingTop:16,borderTop:`1px solid #1e1e14`,display:"flex",alignItems:"center",gap:12}}>
-              <img src={IC.achiFace} alt="Achi Schmidt" style={{width:44,height:44,borderRadius:"50%",objectFit:"cover",border:`2px solid ${IC.gold}`}} onError={e=>e.target.style.display="none"}/>
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:IC.white}}>{IC.name}</div>
-                <div style={{fontSize:10,color:IC.gold,fontStyle:"italic",marginBottom:4}}>{IC.title}</div>
-                <div style={{fontSize:10,color:IC.muted,lineHeight:1.7}}>
-                  <span style={{color:IC.gold}}>📞</span> {IC.tel} &nbsp;·&nbsp;
-                  <span style={{color:IC.gold}}>✉</span> {IC.email}
-                </div>
-              </div>
-              <img src={IC.logo} alt="ICONICONE" style={{height:22,marginLeft:"auto",opacity:0.7}} onError={e=>e.target.style.display="none"}/>
-            </div>
-          </div>
+          {/* Mail Body — exaktes HTML wie gesendet */}
+          <iframe
+            srcDoc={mail.bodyHtml}
+            style={{flex:1,border:"none",minHeight:420}}
+            title="Mail Vorschau"
+            sandbox="allow-same-origin"
+          />
           {/* Actions */}
-          <div style={{padding:"10px 18px",borderTop:`1px solid #1e1e14`,display:"flex",gap:6}}>
+          <div style={{padding:"10px 18px",borderTop:"1px solid #e2e8f0",display:"flex",gap:6,background:"#f8fafc"}}>
             <button style={S.btn("pri")} onClick={async()=>{await navigator.clipboard.writeText(`Betreff: ${mail.subject}\n\n${mail.body}`);setShowMailPreview(null);}}>📋 Kopieren</button>
             <a href={`mailto:${lead.lead.email}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`} style={{...S.btn("blue"),display:"inline-flex",textDecoration:"none"}} onClick={()=>setShowMailPreview(null)}>📧 Mail-App öffnen</a>
             <button style={{...S.btn("ghost"),marginLeft:"auto"}} onClick={()=>setShowMailPreview(null)}>Schließen</button>
