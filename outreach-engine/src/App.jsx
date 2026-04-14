@@ -33,7 +33,7 @@ const IC = {
 // SIGNATUR HTML — erscheint am Ende jeder Mail
 // ═══════════════════════════════════════════════════════════════════════════
 const SIGNATUR_HTML = `
-<div style="margin-top:32px;padding-top:20px;border-top:3px solid #f97316;font-family:Arial,sans-serif;max-width:480px">
+<div style="margin-top:14px;padding-top:12px;border-top:2px solid #f97316;font-family:Arial,sans-serif;max-width:480px">
   <table cellpadding="0" cellspacing="0" border="0" width="100%">
     <tr>
       <td style="padding-right:14px;vertical-align:middle;width:68px">
@@ -204,7 +204,7 @@ function textToHtml(text) {
   const paragraphs = escaped.split(/\n{2,}/);
   const htmlParts = paragraphs.filter(p=>p.trim()).map(p => {
     const lines = p.split("\n").join("<br/>");
-    return `<p style="margin:0 0 14px 0;line-height:1.7;color:#1a1a1a;font-size:15px;font-family:Arial,sans-serif">${lines}</p>`;
+    return `<p style="margin:0 0 6px 0;line-height:1.65;color:#1a1a1a;font-size:15px;font-family:Arial,sans-serif">${lines}</p>`;
   });
   return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.7;max-width:560px">${htmlParts.join("")}</div>`;
 }
@@ -243,7 +243,7 @@ function interpolateHtml(text, lead, insurerName, previewUrl) {
   bodyHtml = bodyHtml.replace(new RegExp(HUB_TOKEN, "g"), hubHtml);
 
   const fullHtml = bodyHtml + (hasSig ? SIGNATUR_HTML : "");
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0;padding:24px;background:#ffffff;font-family:Arial,sans-serif;color:#1a1a1a">${fullHtml}</body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0;padding:16px;background:#ffffff;font-family:Arial,sans-serif;color:#1a1a1a">${fullHtml}</body></html>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
