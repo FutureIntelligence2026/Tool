@@ -298,17 +298,31 @@ const VDot=({id,sz=6})=><div style={{width:sz,height:sz,borderRadius:"50%",backg
 // WEBSITE TEMPLATES (public/templates/{folder}/index.html)
 // ═══════════════════════════════════════════════════════════════════════════
 const WEBSITE_TEMPLATES = [
-  {folder:"arag-christian-lange",      label:"Christian Lange",           tag:"ARAG"},
-  {folder:"arag-claire-schoeps",       label:"Claire Schöps",             tag:"ARAG"},
-  {folder:"arag-micic-osnabrueck",     label:"Micic Osnabrück",           tag:"ARAG"},
-  {folder:"darko-ljevar-arag",         label:"Darko Ljevar",              tag:"ARAG"},
-  {folder:"xemgin-demir-arag",         label:"Xemgin Demir",              tag:"ARAG"},
-  {folder:"koitek-versicherung",       label:"Koitek Versicherung",       tag:"Makler"},
-  {folder:"maik-nowack-versicherungsmakler", label:"Maik Nowack",         tag:"Makler"},
-  {folder:"stefan-fister",             label:"Stefan Fister",             tag:"Versicherung"},
-  {folder:"steinberg-sv",              label:"Steinberg SV",              tag:"Versicherung"},
-  {folder:"lumiere-beaute",            label:"Lumière Beauté",            tag:"Sonstiges"},
+  {folder:"arag-basis",          label:"ARAG",          tag:"ARAG",         color:"#F5A800"},
+  {folder:"huk-basis",           label:"HUK-COBURG",    tag:"HUK-COBURG",   color:"#FFB300"},
+  {folder:"signal-iduna-basis",  label:"SIGNAL IDUNA",  tag:"SIGNAL IDUNA", color:"#003087"},
+  {folder:"allianz-basis",       label:"Allianz",        tag:"Allianz",      color:"#003781"},
+  {folder:"generali-basis",      label:"Generali",       tag:"Generali",     color:"#CC0000"},
+  {folder:"zurich-basis",        label:"Zurich",         tag:"Zurich",       color:"#0C2A5F"},
 ];
+
+const INS_TO_FOLDER = {
+  arag:"arag-basis", huk:"huk-basis", signal_iduna:"signal-iduna-basis",
+  allianz:"allianz-basis", generali:"generali-basis", zurich:"zurich-basis",
+};
+
+function generatePreviewUrl(lead, insurerId) {
+  const folder = INS_TO_FOLDER[insurerId];
+  if (!folder) return "";
+  const base = `${window.location.origin}/templates/${folder}/index.html`;
+  const q = new URLSearchParams();
+  if (lead.vorname)  q.set("v", lead.vorname);
+  if (lead.nachname) q.set("n", lead.nachname);
+  if (lead.telefon)  q.set("t", lead.telefon);
+  if (lead.ort)      q.set("o", lead.ort);
+  if (lead.email)    q.set("e", lead.email);
+  return `${base}?${q}`;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // APP
@@ -364,7 +378,7 @@ export default function App() {
   };
   const accColor=id=>{const i=accounts.findIndex(a=>a.id===id);return ACC_COLORS[i%ACC_COLORS.length]||IC.gold;};
 
-  const makeLead=(ld,insId)=>({id:Date.now()+Math.random(),lead:{...ld},insurer:insId,previewUrl:"",status:"active",sequence:scheduleSequence(ld,new Date(),activeAccounts,templates),createdAt:new Date(),repliedAt:null,mailOverrides:{}});
+  const makeLead=(ld,insId)=>({id:Date.now()+Math.random(),lead:{...ld},insurer:insId,previewUrl:generatePreviewUrl(ld,insId),status:"active",sequence:scheduleSequence(ld,new Date(),activeAccounts,templates),createdAt:new Date(),repliedAt:null,mailOverrides:{}});
   const validateLead=l=>{const e={};["vorname","nachname","email","telefon","ort"].forEach(k=>{if(!l[k]?.trim())e[k]=true;});setFormErrors(e);return!Object.keys(e).length;};
   const addSingle=()=>{if(!validateLead(leadForm))return;setLeads(p=>[...p,makeLead(leadForm,selIns)]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");};
   const importCSV=()=>{
@@ -505,8 +519,8 @@ export default function App() {
         <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.7)",display:"flex",flexDirection:"column"}}>
           <div style={{background:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #e2e8f0",boxShadow:"0 2px 8px rgba(0,0,0,0.1)"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:10,height:10,borderRadius:"50%",background:"#2563eb"}}/>
-              <span style={{fontWeight:700,fontSize:14,color:"#1e2532"}}>{WEBSITE_TEMPLATES.find(t=>t.folder===vPreview)?.label} — Website Template</span>
+              <div style={{width:10,height:10,borderRadius:"50%",background:WEBSITE_TEMPLATES.find(t=>t.folder===vPreview)?.color||"#2563eb"}}/>
+              <span style={{fontWeight:700,fontSize:14,color:"#1e2532"}}>{WEBSITE_TEMPLATES.find(t=>t.folder===vPreview)?.label} — Basis-Template</span>
             </div>
             <div style={{display:"flex",gap:8}}>
               <a href={`/templates/${vPreview}/index.html`} target="_blank" rel="noreferrer" style={{...S.btn(),textDecoration:"none",fontSize:12}}>↗ Neu öffnen</a>
@@ -641,9 +655,23 @@ export default function App() {
                   </div>
                   {isExp&&(
                     <div style={{borderTop:"1px solid #1a1a12",background:"#0a0a08"}}>
-                      <div style={{padding:"7px 14px",borderBottom:"1px solid #1a1a12",display:"flex",gap:7,alignItems:"center"}}>
-                        <span style={{fontSize:8,color:"#3a3830",flexShrink:0,textTransform:"uppercase"}}>Preview URL:</span>
-                        <input value={lead.previewUrl||""} onChange={e=>setLeadUrl(lead.id,e.target.value)} placeholder="https://vorname-nachname.netlify.app" style={{...S.inp(false),fontSize:10,padding:"5px 9px",flex:1}} onFocus={e=>e.target.style.borderColor=IC.gold} onBlur={e=>e.target.style.borderColor="#1e1e14"}/>
+                      <div style={{padding:"7px 14px",borderBottom:"1px solid #1a1a12"}}>
+                        <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:4}}>
+                          <span style={{fontSize:8,color:"#3a3830",flexShrink:0,textTransform:"uppercase"}}>Preview-Link (personalisiert):</span>
+                          <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+                            <button title="Neu generieren" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}} onClick={()=>setLeadUrl(lead.id,generatePreviewUrl(lead.lead,lead.insurer))}>⟳</button>
+                            {lead.previewUrl&&<button title="Kopieren" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}} onClick={()=>navigator.clipboard.writeText(lead.previewUrl)}>📋</button>}
+                            {lead.previewUrl&&<a href={lead.previewUrl} target="_blank" rel="noreferrer" title="Vorschau öffnen" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9,textDecoration:"none"}}>👁 Vorschau</a>}
+                          </div>
+                        </div>
+                        {lead.previewUrl?(
+                          <div style={{fontSize:9,color:"#10b981",background:"rgba(16,185,129,0.05)",border:"1px solid rgba(16,185,129,0.1)",borderRadius:6,padding:"4px 9px",wordBreak:"break-all",lineHeight:1.5}}>
+                            ✓ {lead.previewUrl}
+                          </div>
+                        ):(
+                          <div style={{fontSize:9,color:"#3a3830",fontStyle:"italic"}}>Kein Link — klick ⟳ zum Generieren</div>
+                        )}
+                        <input value={lead.previewUrl||""} onChange={e=>setLeadUrl(lead.id,e.target.value)} placeholder="https://..." style={{...S.inp(false),fontSize:9,padding:"4px 8px",marginTop:5}} onFocus={e=>e.target.style.borderColor=IC.gold} onBlur={e=>e.target.style.borderColor="#1e1e14"}/>
                       </div>
                       {lead.status==="replied"&&<div style={{padding:"6px 14px",background:"rgba(16,185,129,0.05)",borderBottom:"1px solid rgba(16,185,129,0.1)",fontSize:9,color:"#10b981"}}>✓ Geantwortet {lead.repliedAt?`· ${new Date(lead.repliedAt).toLocaleString("de-DE")}`:""} — alle weiteren Mails gestoppt</div>}
                       {lead.sequence?.map(seq=>{
@@ -733,14 +761,15 @@ export default function App() {
             <div style={S.card}>
               <div style={{fontSize:14,fontWeight:700,color:"#1e2532",marginBottom:4}}>🌐 Website-Templates</div>
               <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>Fertige Websites — direkt im Tool vorschauen</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
                 {WEBSITE_TEMPLATES.map(t=>(
-                  <div key={t.folder} style={{background:"#f8fafc",borderRadius:10,padding:"12px 14px",border:"1px solid #e2e8f0",display:"flex",alignItems:"center",gap:10}}>
+                  <div key={t.folder} style={{background:"#f8fafc",borderRadius:10,padding:"12px 14px",border:`1.5px solid ${t.color}22`,display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:t.color,flexShrink:0}}/>
                     <div style={{flex:1}}>
-                      <div style={{fontWeight:600,fontSize:13,color:"#1e2532",marginBottom:2}}>{t.label}</div>
-                      <div style={{fontSize:11,color:"#64748b"}}>{t.tag}</div>
+                      <div style={{fontWeight:700,fontSize:13,color:"#1e2532",marginBottom:1}}>{t.label}</div>
+                      <div style={{fontSize:10,color:t.color,fontWeight:600}}>Basis-Template</div>
                     </div>
-                    <button style={{...S.btn(),padding:"6px 14px",fontSize:12,flexShrink:0}} onClick={()=>setVPreview(t.folder)}>👁 Ansehen</button>
+                    <button style={{...S.btn(),padding:"6px 12px",fontSize:11,flexShrink:0,background:t.color,boxShadow:"none"}} onClick={()=>setVPreview(t.folder)}>👁</button>
                   </div>
                 ))}
               </div>
