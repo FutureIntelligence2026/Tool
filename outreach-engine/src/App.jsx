@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from "react";
 // ═══════════════════════════════════════════════════════════════════════════
 const IC = {
   url:        "https://iconicone.de",
-  hubspot:    "https://meetings-eu1.hubspot.com/achahrour",
+  hubspot:    "https://calendly.com/website-iconicone/30min",
   logo:       "https://www.iconicone.de/img/iconicone-logo-wide.png",
   achiFace:   "https://www.iconicone.de/img/achi-face.jpeg",
   achiPortrait:"https://www.iconicone.de/img/achi-portrait.jpeg",
@@ -259,10 +259,10 @@ function detectFromRow(parts){return detectIns(parts[9]||"")||detectIns(parts[2]
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
 const EMPTY_LEAD={vorname:"",nachname:"",email:"",telefon:"",strasse:"",plz:"",ort:"",jahre:"10",kunden:"200"};
-const EMPTY_ACC={name:"",email:"",smtpHost:"smtp.strato.de",smtpPort:"465",imapHost:"imap.strato.de",imapPort:"993"};
+const EMPTY_ACC={name:"",email:"",password:"",smtpHost:"smtp.strato.de",smtpPort:"465",imapHost:"imap.strato.de",imapPort:"993"};
 const ACC_COLORS=[IC.gold,"#3b82f6","#10b981","#a855f7","#f97316","#06b6d4","#ec4899","#84cc16"];
-const LSC={active:"#3b82f6",replied:"#10b981",completed:"#6b7280",stopped:"#ef4444"};
-const LSL={active:"Aktiv",replied:"Geantwortet ✓",completed:"Abgeschlossen",stopped:"Gestoppt"};
+const LSC={active:"#3b82f6",replied:"#10b981",completed:"#6b7280",stopped:"#ef4444",archived:"#94a3b8"};
+const LSL={active:"Aktiv",replied:"Geantwortet ✓",completed:"Abgeschlossen",stopped:"Gestoppt",archived:"Archiviert"};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STYLES — Clean Light SaaS
@@ -363,8 +363,24 @@ export default function App() {
   const [testMailTo,setTestMailTo]=useState("");
   const [testMailSending,setTestMailSending]=useState(false);
   const [testMailResult,setTestMailResult]=useState(null);
+  const [editLeadId,setEditLeadId]=useState(null);
+  const [editLeadForm,setEditLeadForm]=useState(null);
 
   const activeAccounts=accounts.filter(a=>a.active);
+
+  // ── LOCALSTORAGE PERSISTENCE ───────────────────────────────────────────────
+  useEffect(()=>{
+    try{
+      const sl=localStorage.getItem("ic_leads");     if(sl) setLeads(JSON.parse(sl));
+      const sa=localStorage.getItem("ic_accounts");  if(sa) setAccounts(JSON.parse(sa));
+      const st=localStorage.getItem("ic_templates"); if(st) setTemplates(JSON.parse(st));
+      const sp=localStorage.getItem("ic_passwords"); if(sp) setAccPasswords(JSON.parse(sp));
+    }catch(e){}
+  },[]);
+  useEffect(()=>{try{localStorage.setItem("ic_leads",JSON.stringify(leads));}catch(e){}},[leads]);
+  useEffect(()=>{try{localStorage.setItem("ic_accounts",JSON.stringify(accounts));}catch(e){}},[accounts]);
+  useEffect(()=>{try{localStorage.setItem("ic_templates",JSON.stringify(templates));}catch(e){}},[templates]);
+  useEffect(()=>{try{localStorage.setItem("ic_passwords",JSON.stringify(accPasswords));}catch(e){}},[accPasswords]);
 
   const todayStr=new Date().toDateString();
   const allSteps=leads.flatMap(l=>l.sequence||[]);
@@ -377,8 +393,16 @@ export default function App() {
 
   const saveAcc=()=>{
     if(!accForm.name.trim()||!accForm.email.trim())return;
-    if(editAccId){setAccounts(p=>p.map(a=>a.id===editAccId?{...a,...accForm}:a));setEditAccId(null);}
-    else setAccounts(p=>[...p,{id:"acc"+Date.now(),...accForm,active:true}]);
+    const{password,...rest}=accForm;
+    if(editAccId){
+      setAccounts(p=>p.map(a=>a.id===editAccId?{...a,...rest}:a));
+      if(password) setAccPasswords(p=>({...p,[editAccId]:password}));
+      setEditAccId(null);
+    } else {
+      const id="acc"+Date.now();
+      setAccounts(p=>[...p,{id,...rest,active:true}]);
+      if(password) setAccPasswords(p=>({...p,[id]:password}));
+    }
     setAccForm(EMPTY_ACC);setShowAccForm(false);
   };
   const accColor=id=>{const i=accounts.findIndex(a=>a.id===id);return ACC_COLORS[i%ACC_COLORS.length]||IC.gold;};
@@ -407,6 +431,9 @@ export default function App() {
   const setLeadUrl=(id,url)=>setLeads(p=>p.map(l=>l.id===id?{...l,previewUrl:url}:l));
   const setMailOverride=(lid,step,field,value)=>setLeads(p=>p.map(l=>l.id!==lid?l:{...l,mailOverrides:{...l.mailOverrides,[step]:{...(l.mailOverrides[step]||{}),[field]:value}}}));
   const clearOverride=(lid,step)=>setLeads(p=>p.map(l=>l.id!==lid?l:{...l,mailOverrides:{...l.mailOverrides,[step]:undefined}}));
+  const archiveLead=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:l.status==="archived"?"active":"archived"}));
+  const startEditLead=lead=>{setEditLeadId(lead.id);setEditLeadForm({...lead.lead});};
+  const saveEditLead=()=>{if(!editLeadId||!editLeadForm)return;setLeads(p=>p.map(l=>l.id!==editLeadId?l:{...l,lead:{...editLeadForm},previewUrl:generatePreviewUrl(editLeadForm,l.insurer)}));setEditLeadId(null);setEditLeadForm(null);};
 
   const getEffectiveMail=(lead,step)=>{
     const tpl=templates.find(t=>t.step===step);
@@ -503,16 +530,22 @@ export default function App() {
     if(!testMailTo||!testMailModal)return;
     const acc=activeAccounts[0];
     const pass=accPasswords[acc?.id];
-    if(!acc||!pass){setTestMailResult("⚠ Bitte zuerst IMAP-Passwort bei Account eintragen.");return;}
     const demoLead={lead:{vorname:"Max",nachname:"Mustermann",email:testMailTo,ort:"Berlin"},insurer:Object.keys(VERSICHERER)[0],previewUrl:""};
     const mail=getEffectiveMail(demoLead,testMailModal.step);
-    setTestMailSending(true);setTestMailResult(null);
-    try{
-      const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:testMailTo,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
-      const data=await res.json();
-      setTestMailResult(data.ok?"✅ Test-Mail gesendet!":"❌ "+data.error);
-    }catch(e){setTestMailResult("❌ "+e.message);}
-    setTestMailSending(false);
+    // Try SMTP if account + password available
+    if(acc&&pass){
+      setTestMailSending(true);setTestMailResult(null);
+      try{
+        const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:testMailTo,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
+        const data=await res.json();
+        setTestMailResult(data.ok?"✅ Test-Mail gesendet!":"❌ "+data.error);
+      }catch(e){setTestMailResult("❌ "+e.message);}
+      setTestMailSending(false);
+    } else {
+      // Fallback: open mail app (Gmail, Outlook, Apple Mail etc.)
+      window.open(`mailto:${testMailTo}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`,"_self");
+      setTestMailResult("✅ Mail-App geöffnet — bitte manuell absenden.");
+    }
   };
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -536,6 +569,27 @@ export default function App() {
         </div>
       )}
 
+      {/* EDIT LEAD MODAL */}
+      {editLeadId&&editLeadForm&&(
+        <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"#fff",borderRadius:16,padding:28,maxWidth:520,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+            <div style={{fontSize:15,fontWeight:700,color:"#1e2532",marginBottom:16}}>✏ Lead bearbeiten</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+              {[{k:"vorname",l:"Vorname"},{k:"nachname",l:"Nachname"},{k:"email",l:"E-Mail",f:true},{k:"telefon",l:"Telefon"},{k:"strasse",l:"Straße",f:true},{k:"plz",l:"PLZ"},{k:"ort",l:"Ort"},{k:"jahre",l:"Jahre"},{k:"kunden",l:"Kunden"}].map(f=>(
+                <div key={f.k} style={{gridColumn:f.f?"1/-1":"auto"}}>
+                  <label style={S.lbl}>{f.l}</label>
+                  <input value={editLeadForm[f.k]||""} onChange={e=>setEditLeadForm(p=>({...p,[f.k]:e.target.value}))} style={S.inp(false)} onFocus={e=>e.target.style.borderColor="#2563eb"} onBlur={e=>e.target.style.borderColor="#cbd5e1"}/>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}>
+              <button style={S.btn("ghost")} onClick={()=>{setEditLeadId(null);setEditLeadForm(null);}}>Abbrechen</button>
+              <button style={S.btn()} onClick={saveEditLead}>💾 Speichern</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TEST MAIL MODAL */}
       {testMailModal&&(
         <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -547,6 +601,9 @@ export default function App() {
             <div style={{background:"#f8fafc",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#475569",marginBottom:16,border:"1px solid #e2e8f0"}}>
               <div style={{fontWeight:600,marginBottom:2}}>Betreff-Vorschau:</div>
               <div style={{color:"#1e2532"}}>{(templates.find(t=>t.step===testMailModal.step)?.subject||"").replace(/{{VORNAME}}/g,"Max").replace(/{{ORT}}/g,"Berlin").replace(/{{VERSICHERER}}/g,"SIGNAL IDUNA")}</div>
+            </div>
+            <div style={{background:"#eff6ff",borderRadius:8,padding:"8px 12px",fontSize:11,color:"#3b82f6",marginBottom:12,border:"1px solid #bfdbfe"}}>
+              💡 Mit SMTP-Passwort → direkt gesendet. Ohne Passwort → öffnet Gmail / Apple Mail / Outlook.
             </div>
             {testMailResult&&<div style={{padding:"8px 14px",borderRadius:8,marginBottom:14,fontSize:13,background:testMailResult.startsWith("✅")?"#f0fdf4":"#fff1f2",color:testMailResult.startsWith("✅")?"#15803d":"#dc2626",border:`1px solid ${testMailResult.startsWith("✅")?"#bbf7d0":"#fecaca"}`}}>{testMailResult}</div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
@@ -654,7 +711,9 @@ export default function App() {
                     <div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
                       {lead.status==="active"&&<button style={S.btn("green")} onClick={()=>markReplied(lead.id)}>✉ Geantwortet</button>}
                       {lead.status==="active"&&<button style={S.btn("red")} onClick={()=>stopLead(lead.id)}>⏹</button>}
-                      <button style={{...S.btn("ghost"),fontSize:8,padding:"3px 6px"}} onClick={()=>removeLead(lead.id)}>✕</button>
+                      <button title="Bearbeiten" style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px"}} onClick={()=>startEditLead(lead)}>✏</button>
+                      <button title={lead.status==="archived"?"Wiederherstellen":"Archivieren"} style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px",color:"#94a3b8"}} onClick={()=>archiveLead(lead.id)}>{lead.status==="archived"?"↩":"📁"}</button>
+                      <button title="Löschen" style={{...S.btn("red"),fontSize:10,padding:"3px 7px"}} onClick={()=>removeLead(lead.id)}>🗑</button>
                     </div>
                     <span style={{fontSize:9,color:"#3a3830"}}>{isExp?"▲":"▼"}</span>
                   </div>
@@ -843,7 +902,7 @@ export default function App() {
           <div style={{maxWidth:700}}>
             <div style={S.goldCard}>
               <div style={{fontSize:10,color:IC.gold,fontWeight:700,marginBottom:3}}>{activeAccounts.length*30} Mails/Tag Kapazität</div>
-              <div style={{fontSize:9,color:IC.muted}}>30/Tag pro Account · 08–18 Uhr · Automatisch rotiert · IMAP-Passwort für Reply-Tracking erforderlich</div>
+              <div style={{fontSize:9,color:IC.muted}}>30/Tag pro Account · 08–18 Uhr · Automatisch rotiert · Passwort wird lokal gespeichert<br/>Gmail: smtp.gmail.com:587, App-Passwort verwenden (Google Konto → Sicherheit → App-Passwörter)</div>
             </div>
             {accounts.map((acc,i)=>(
               <div key={acc.id} style={{...S.card,opacity:acc.active?1:0.5}}>
@@ -857,7 +916,7 @@ export default function App() {
                   <div style={{minWidth:170}}>
                     <label style={S.lbl}>IMAP-Passwort (Reply Tracking)</label>
                     <input type="password" value={accPasswords[acc.id]||""} onChange={e=>setAccPasswords(p=>({...p,[acc.id]:e.target.value}))} placeholder="Strato-Passwort" style={{...S.inp(false),fontSize:10,padding:"5px 9px"}} onFocus={e=>e.target.style.borderColor=IC.gold} onBlur={e=>e.target.style.borderColor="#1e1e14"}/>
-                    <div style={{fontSize:7,color:"#2a2a18",marginTop:2}}>Nur im RAM — wird nicht gespeichert</div>
+                    <div style={{fontSize:7,color:"#10b981",marginTop:2}}>✓ Wird lokal gespeichert</div>
                   </div>
                   <div style={{display:"flex",gap:4}}>
                     <button style={S.btn(acc.active?"ghost":"green")} onClick={()=>setAccounts(p=>p.map(a=>a.id===acc.id?{...a,active:!a.active}:a))}>{acc.active?"⏸":"▶"}</button>
@@ -871,8 +930,8 @@ export default function App() {
               <div style={{...S.card,border:`1px solid ${IC.goldDark}44`}}>
                 <div style={{fontSize:11,color:IC.gold,fontWeight:700,marginBottom:10}}>{editAccId?"Bearbeiten":"Neuer Account"}</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                  {[{k:"name",l:"Name",p:"Achi Schmidt – ICONICONE"},{k:"email",l:"E-Mail",p:"website@iconicone.de"},{k:"smtpHost",l:"SMTP Host",p:"smtp.strato.de"},{k:"smtpPort",l:"SMTP Port",p:"465"},{k:"imapHost",l:"IMAP Host",p:"imap.strato.de"},{k:"imapPort",l:"IMAP Port",p:"993"}].map(f=>(
-                    <div key={f.k}><label style={S.lbl}>{f.l}</label><input value={accForm[f.k]||""} onChange={e=>setAccForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} style={S.inp(false)} onFocus={e=>e.target.style.borderColor=IC.gold} onBlur={e=>e.target.style.borderColor="#1e1e14"}/></div>
+                  {[{k:"name",l:"Name",p:"Achi Schmidt – ICONICONE"},{k:"email",l:"E-Mail",p:"website@iconicone.de"},{k:"password",l:"Passwort",p:"••••••••",t:"password"},{k:"smtpHost",l:"SMTP Host",p:"smtp.strato.de"},{k:"smtpPort",l:"SMTP Port",p:"465"},{k:"imapHost",l:"IMAP Host",p:"imap.strato.de"},{k:"imapPort",l:"IMAP Port",p:"993"}].map(f=>(
+                    <div key={f.k}><label style={S.lbl}>{f.l}</label><input type={f.t||"text"} value={accForm[f.k]||""} onChange={e=>setAccForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} style={S.inp(false)} onFocus={e=>e.target.style.borderColor=IC.gold} onBlur={e=>e.target.style.borderColor="#1e1e14"}/></div>
                   ))}
                 </div>
                 <div style={{display:"flex",gap:7,marginTop:10}}>
