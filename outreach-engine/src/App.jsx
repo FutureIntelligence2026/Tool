@@ -1066,10 +1066,21 @@ export default function App() {
             ):(
               <div style={S.card}>
                 <div style={{fontSize:9,color:IC.muted,marginBottom:7,lineHeight:1.6}}>Format: <code style={{color:IC.gold,fontSize:8}}>Vorname;Nachname;Email;Telefon;Strasse;PLZ;Ort;Versicherer</code></div>
-                <textarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder={"Vorname;Nachname;Email;...;Versicherer\nThomas;Müller;t.mueller@example.de;089 123;Hauptstr 1;80331;München;SIGNAL IDUNA"} style={{...S.ta,minHeight:110}}/>
+                {/* File upload drop zone */}
+                <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,border:`2px dashed ${IC.gold}55`,borderRadius:8,padding:"14px 12px",marginBottom:8,cursor:"pointer",color:IC.muted,fontSize:11,background:"#111108",transition:"border-color 0.15s"}}
+                  onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor=IC.gold;}}
+                  onDragLeave={e=>{e.currentTarget.style.borderColor=`${IC.gold}55`;}}
+                  onDrop={e=>{e.preventDefault();e.currentTarget.style.borderColor=`${IC.gold}55`;const f=e.dataTransfer.files[0];if(f)f.text().then(t=>setCsvText(t.replace(/\r\n/g,"\n").replace(/\r/g,"\n")));}}
+                >
+                  <input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)f.text().then(t=>setCsvText(t.replace(/\r\n/g,"\n").replace(/\r/g,"\n")));e.target.value="";}}/>
+                  <span style={{fontSize:18}}>📂</span>
+                  <span>CSV-Datei hochladen oder hier reinziehen</span>
+                </label>
+                <textarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder={"Vorname;Nachname;Email;...;Versicherer\nThomas;Müller;t.mueller@example.de;089 123;Hauptstr 1;80331;München;SIGNAL IDUNA"} style={{...S.ta,minHeight:80}}/>
                 <div style={{display:"flex",gap:6,marginTop:9}}>
                   <button style={S.btn()} onClick={importCSV} disabled={!csvText.trim()}>📥 {Math.max(0,csvText.trim().split("\n").length-1)} Leads importieren</button>
                   <button style={S.btn("ghost")} onClick={()=>setCsvText("Vorname;Nachname;Email;Telefon;Strasse;PLZ;Ort;Versicherer\nThomas;Müller;t.mueller@example.de;089 123456;Hauptstr 1;80331;München;SIGNAL IDUNA\nAnna;Schmidt;a.schmidt@example.de;030 456789;Berliner Str 5;10115;Berlin;ARAG")}>Demo</button>
+                  {csvText&&<button style={S.btn("ghost")} onClick={()=>setCsvText("")}>✕</button>}
                 </div>
               </div>
             )}
