@@ -78,15 +78,15 @@ const DEFAULT_TEMPLATES = [
     subject:`Kurze Frage zu Ihrer Online-Präsenz, {{NACHNAME}}`,
     body:`Hallo {{VORNAME}},
 
-ich bin auf der Suche nach {{VERSICHERER}}-Beratern in {{ORT}} — und dabei auf Ihr Profil gestoßen.
+ich recherchiere gerade nach {{VERSICHERER}}-Beratern in {{ORT}} — und bin dabei auf Sie gestoßen.
 
-Ich habe mir erlaubt, bereits eine fertige Website für Sie zu erstellen:
+Ich habe Ihnen bereits eine fertige Website erstellt:
 
 👉 {{URL}}
 
-Die Seite ist komplett auf Sie zugeschnitten — mit Ihren Kontaktdaten, Ihren Leistungen und einem Kontaktformular, das neue Anfragen direkt zu Ihnen leitet.
+Die Seite ist komplett auf Sie zugeschnitten — mit Ihren Kontaktdaten, Ihren Leistungen und einem Kontaktformular, das neue Kundenanfragen direkt zu Ihnen leitet.
 
-Schaut's gut aus? Ich höre gerne Ihre Meinung.
+Werfen Sie kurz einen Blick darauf — ich bin gespannt, was Sie sagen.
 
 Viele Grüße
 {{SIGNATUR}}`,
@@ -192,7 +192,7 @@ function interpolate(text, lead, insurerName, previewUrl) {
     .replace(/\{\{NACHNAME\}\}/g,    lead?.nachname   || "")
     .replace(/\{\{ORT\}\}/g,         lead?.ort        || "")
     .replace(/\{\{VERSICHERER\}\}/g, insurerName      || "")
-    .replace(/\{\{URL\}\}/g,         previewUrl       || "[Demo-URL eintragen]")
+    .replace(/\{\{URL\}\}/g,         previewUrl       || "")
     .replace(/\{\{HUBSPOT\}\}/g,     IC.hubspot)
     .replace(/\{\{SIGNATUR\}\}/g,    SIGNATUR_TEXT);
 }
@@ -457,10 +457,11 @@ export default function App() {
     const tpl=templates.find(t=>t.step===step);
     const ov=lead.mailOverrides?.[step];
     const ins=VERSICHERER[lead.insurer]?.name||"";
+    const url=lead.previewUrl||generatePreviewUrl(lead.lead,lead.insurer);
     return{
-      subject:interpolate(ov?.subject??tpl?.subject??"",lead.lead,ins,lead.previewUrl),
-      body:interpolate(ov?.body??tpl?.body??"",lead.lead,ins,lead.previewUrl),
-      bodyHtml:interpolateHtml(ov?.body??tpl?.body??"",lead.lead,ins,lead.previewUrl),
+      subject:interpolate(ov?.subject??tpl?.subject??"",lead.lead,ins,url),
+      body:interpolate(ov?.body??tpl?.body??"",lead.lead,ins,url),
+      bodyHtml:interpolateHtml(ov?.body??tpl?.body??"",lead.lead,ins,url),
       isOverride:!!(ov?.subject||ov?.body),
     };
   };
@@ -547,7 +548,9 @@ export default function App() {
   const [testSmtpPass,setTestSmtpPass]=useState("");
 
   const buildDemoMail=(step)=>{
-    const demoLead={lead:{vorname:"Max",nachname:"Mustermann",email:testMailTo||"test@example.de",ort:"Berlin"},insurer:Object.keys(VERSICHERER)[0],previewUrl:""};
+    const insId=Object.keys(VERSICHERER)[0];
+    const demoData={vorname:"Max",nachname:"Mustermann",email:testMailTo||"test@example.de",ort:"Berlin"};
+    const demoLead={lead:demoData,insurer:insId,previewUrl:generatePreviewUrl(demoData,insId)};
     return getEffectiveMail(demoLead,step);
   };
 
