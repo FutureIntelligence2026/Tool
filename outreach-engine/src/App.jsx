@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-const TEMPLATE_VERSION = "v3";
+const TEMPLATE_VERSION = "v4";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ICONICONE BRAND KONFIG — direkt von iconicone.de
@@ -84,7 +84,6 @@ ich recherchiere gerade nach {{VERSICHERER}}-Beratern in {{ORT}} — und bin dab
 
 Ich habe Ihnen bereits eine fertige Website erstellt:
 👉 {{URL}}
-
 Die Seite ist komplett auf Sie zugeschnitten — mit Ihren Kontaktdaten, Ihren Leistungen und einem Kontaktformular, das neue Kundenanfragen direkt zu Ihnen leitet.
 
 Werfen Sie kurz einen Blick darauf — ich bin gespannt, was Sie sagen.
@@ -219,10 +218,9 @@ function interpolateHtml(text, lead, insurerName, previewUrl) {
 
   // URL → clickable link with insurer + agent name
   const URL_TOKEN = "__ICURL__";
-  const agentName = [lead?.vorname, lead?.nachname].filter(Boolean).join(" ");
-  const linkLabel = [insurerName, agentName].filter(Boolean).join(" — ");
+  const displayUrl = previewUrl ? previewUrl.replace(/^https?:\/\//, "") : "";
   const linkHtml = previewUrl
-    ? `<a href="${previewUrl}" style="color:#f97316;font-weight:700;text-decoration:none">👉 ${linkLabel || previewUrl}</a>`
+    ? `<a href="${previewUrl}" style="color:#f97316;font-weight:700;text-decoration:none">👉 ${displayUrl}</a>`
     : "";
 
   // Replace {{URL}} with token (no HTML special chars → survives escaping)
@@ -371,10 +369,21 @@ function generatePreviewUrl(lead, insurerId) {
   return `${base}?${q}`;
 }
 
-async function shortenUrl(longUrl) {
+function makeAlias(lead, insurerId) {
+  const ins = (INS_TO_FOLDER[insurerId] || "").replace("-basis", "");
+  const name = [lead.vorname, lead.nachname]
+    .filter(Boolean).join("-").toLowerCase()
+    .replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss")
+    .replace(/[^a-z0-9-]/g,"").slice(0, 22);
+  return `${ins}-${name}`.slice(0, 30);
+}
+
+async function shortenUrl(longUrl, alias) {
   if (!longUrl) return longUrl;
   try {
-    const resp = await fetch(`/api/shorten?url=${encodeURIComponent(longUrl)}`);
+    const params = new URLSearchParams({ url: longUrl });
+    if (alias) params.set("alias", alias);
+    const resp = await fetch(`/api/shorten?${params}`);
     const data = await resp.json();
     if (data.short && data.short.startsWith("http")) return data.short;
   } catch {}
@@ -461,7 +470,7 @@ export default function App() {
 
   const makeLead=(ld,insId)=>({id:Date.now()+Math.random(),lead:{...ld},insurer:insId,previewUrl:generatePreviewUrl(ld,insId),status:"active",sequence:scheduleSequence(ld,new Date(),activeAccounts,templates),createdAt:new Date(),repliedAt:null,mailOverrides:{}});
   const validateLead=l=>{const e={};["vorname","nachname","email","telefon","ort"].forEach(k=>{if(!l[k]?.trim())e[k]=true;});setFormErrors(e);return!Object.keys(e).length;};
-  const addSingle=async()=>{if(!validateLead(leadForm))return;const nl=makeLead(leadForm,selIns);const su=await shortenUrl(nl.previewUrl);setLeads(p=>[...p,{...nl,previewUrl:su}]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");};
+  const addSingle=async()=>{if(!validateLead(leadForm))return;const nl=makeLead(leadForm,selIns);const su=await shortenUrl(nl.previewUrl,makeAlias(leadForm,selIns));setLeads(p=>[...p,{...nl,previewUrl:su}]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");};
   const importCSV=async()=>{
     const lines=csvText.trim().split("\n").filter(Boolean).slice(1);const log=[];
     const nl=lines.map((line)=>{
@@ -473,7 +482,7 @@ export default function App() {
       log.push({name:`${vorname} ${nachname}`,ins:VERSICHERER[det]?.name,auto:!!detectFromRow(parts)});
       return makeLead(ld,det);
     }).filter(Boolean);
-    const shortened=await Promise.all(nl.map(async l=>({...l,previewUrl:await shortenUrl(l.previewUrl)})));
+    const shortened=await Promise.all(nl.map(async l=>({...l,previewUrl:await shortenUrl(l.previewUrl,makeAlias(l.lead,l.insurer))})));
     setLeads(p=>[...p,...shortened]);setDetectLog(log);setCsvText("");setTab("leads");
   };
 
@@ -486,7 +495,7 @@ export default function App() {
   const clearOverride=(lid,step)=>setLeads(p=>p.map(l=>l.id!==lid?l:{...l,mailOverrides:{...l.mailOverrides,[step]:undefined}}));
   const archiveLead=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:l.status==="archived"?"active":"archived"}));
   const startEditLead=lead=>{setEditLeadId(lead.id);setEditLeadForm({...lead.lead});};
-  const saveEditLead=async()=>{if(!editLeadId||!editLeadForm)return;const insId=leads.find(l=>l.id===editLeadId)?.insurer;const su=await shortenUrl(generatePreviewUrl(editLeadForm,insId));setLeads(p=>p.map(l=>l.id!==editLeadId?l:{...l,lead:{...editLeadForm},previewUrl:su}));setEditLeadId(null);setEditLeadForm(null);};
+  const saveEditLead=async()=>{if(!editLeadId||!editLeadForm)return;const insId=leads.find(l=>l.id===editLeadId)?.insurer;const su=await shortenUrl(generatePreviewUrl(editLeadForm,insId),makeAlias(editLeadForm,insId));setLeads(p=>p.map(l=>l.id!==editLeadId?l:{...l,lead:{...editLeadForm},previewUrl:su}));setEditLeadId(null);setEditLeadForm(null);};
 
   const getEffectiveMail=(lead,step)=>{
     const tpl=templates.find(t=>t.step===step);
@@ -802,7 +811,7 @@ export default function App() {
                         <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:4}}>
                           <span style={{fontSize:8,color:"#3a3830",flexShrink:0,textTransform:"uppercase"}}>Preview-Link (personalisiert):</span>
                           <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
-                            <button title="Neu generieren" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}} onClick={async()=>{const su=await shortenUrl(generatePreviewUrl(lead.lead,lead.insurer));setLeadUrl(lead.id,su);}}>⟳</button>
+                            <button title="Neu generieren" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}} onClick={async()=>{const su=await shortenUrl(generatePreviewUrl(lead.lead,lead.insurer),makeAlias(lead.lead,lead.insurer));setLeadUrl(lead.id,su);}}>⟳</button>
                             {lead.previewUrl&&<button title="Kopieren" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9}} onClick={()=>navigator.clipboard.writeText(lead.previewUrl)}>📋</button>}
                             {lead.previewUrl&&<a href={lead.previewUrl} target="_blank" rel="noreferrer" title="Vorschau öffnen" style={{...S.btn("ghost"),padding:"2px 7px",fontSize:9,textDecoration:"none"}}>👁 Vorschau</a>}
                           </div>
