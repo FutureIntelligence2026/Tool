@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-const TEMPLATE_VERSION = "v4";
+const TEMPLATE_VERSION = "v5";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ICONICONE BRAND KONFIG — direkt von iconicone.de
@@ -83,7 +83,7 @@ const DEFAULT_TEMPLATES = [
 ich recherchiere gerade nach {{VERSICHERER}}-Beratern in {{ORT}} — und bin dabei auf Sie gestoßen.
 
 Ich habe Ihnen bereits eine fertige Website erstellt:
-👉 {{URL}}
+{{URL}}
 Die Seite ist komplett auf Sie zugeschnitten — mit Ihren Kontaktdaten, Ihren Leistungen und einem Kontaktformular, das neue Kundenanfragen direkt zu Ihnen leitet.
 
 Werfen Sie kurz einen Blick darauf — ich bin gespannt, was Sie sagen.
@@ -98,7 +98,7 @@ Viele Grüße
     body:`Hallo {{VORNAME}},
 
 kurze Nachfrage — haben Sie die Website gesehen?
-👉 {{URL}}
+{{URL}}
 
 Was Sie bekommen:
 ✓ SEO-optimiert — damit Sie bei Google in {{ORT}} gefunden werden
@@ -113,7 +113,7 @@ Was Sie bei ICONICONE zahlen:
 Einmalig 499€. Kein Abo. Keine Folgekosten. Fertig in 24h.
 
 Termin buchen — 15 Minuten reichen:
-👉 {{HUBSPOT}}
+{{HUBSPOT}}
 
 Viele Grüße
 {{SIGNATUR}}`,
@@ -129,12 +129,12 @@ eine ehrliche Frage: Wie viele Ihrer Neukunden finden Sie heute über Google?
 Die meisten {{VERSICHERER}}-Berater, die ich kenne, sagen: kaum bis keine. Weil entweder gar keine Website da ist — oder die bestehende nicht für Conversions gebaut wurde.
 
 Genau das löst die Seite, die ich für Sie erstellt habe:
-👉 {{URL}}
+{{URL}}
 
 499€ einmalig. SEO eingebaut. Neue Anfragen laufen automatisch zu Ihnen.
 
 Möchten Sie das kurz besprechen?
-👉 {{HUBSPOT}}
+{{HUBSPOT}}
 
 Oder einfach antworten — ich erkläre alles in 15 Minuten.
 
@@ -148,14 +148,14 @@ Viele Grüße
     body:`Hallo {{VORNAME}},
 
 ich melde mich ein letztes Mal wegen Ihrer Website:
-👉 {{URL}}
+{{URL}}
 
 Ich frage, weil ich in {{ORT}} aktuell nur eine Seite für {{VERSICHERER}}-Berater livesetze — und ich diese Möglichkeit nicht an Ihnen vorbeigehen lassen wollte.
 
 499€ einmalig. In 24h live.
 
 Falls es passt:
-👉 {{HUBSPOT}}
+{{HUBSPOT}}
 
 Falls nicht — kein Problem, ich melde mich nicht mehr.
 
@@ -171,7 +171,7 @@ Viele Grüße
 ich nehme Sie aus meinen Nachrichten raus — Sie hören nichts mehr von mir.
 
 Die Website bleibt noch eine Weile online, falls Sie irgendwann Interesse haben:
-👉 {{URL}}
+{{URL}}
 
 Falls sich Ihre Situation ändert, melden Sie sich gerne:
 🌐 ${IC.url}
@@ -216,27 +216,31 @@ function interpolateHtml(text, lead, insurerName, previewUrl) {
   const bodyTpl = sigMarker >= 0 ? tpl.slice(0, sigMarker) : tpl;
   const hasSig = sigMarker >= 0;
 
-  // URL → clickable link with insurer + agent name
+  // URL → clickable link
   const URL_TOKEN = "__ICURL__";
-  const displayUrl = previewUrl ? previewUrl.replace(/^https?:\/\//, "") : "";
+  const HUB_TOKEN = "__ICHUB__";
+  const displayUrl = previewUrl ? "www." + previewUrl.replace(/^https?:\/\/(www\.)?/, "") : "";
   const linkHtml = previewUrl
     ? `<a href="${previewUrl}" style="color:#f97316;font-weight:700;text-decoration:none">👉 ${displayUrl}</a>`
     : "";
+  const hubHtml = `<a href="${IC.hubspot}" style="color:#f97316;font-weight:700;text-decoration:none">👉 Termin buchen — 15 Minuten</a>`;
 
-  // Replace {{URL}} with token (no HTML special chars → survives escaping)
-  const bodyWithToken = bodyTpl.replace(/\{\{URL\}\}/g, URL_TOKEN);
+  // Replace {{URL}} and {{HUBSPOT}} with tokens before HTML escaping
+  const bodyWithToken = bodyTpl
+    .replace(/\{\{URL\}\}/g, URL_TOKEN)
+    .replace(/\{\{HUBSPOT\}\}/g, HUB_TOKEN);
 
-  // Interpolate all other placeholders
+  // Interpolate remaining placeholders
   const interpolated = bodyWithToken
     .replace(/\{\{VORNAME\}\}/g,     lead?.vorname    || "")
     .replace(/\{\{NACHNAME\}\}/g,    lead?.nachname   || "")
     .replace(/\{\{ORT\}\}/g,         lead?.ort        || "")
-    .replace(/\{\{VERSICHERER\}\}/g, insurerName      || "")
-    .replace(/\{\{HUBSPOT\}\}/g,     IC.hubspot);
+    .replace(/\{\{VERSICHERER\}\}/g, insurerName      || "");
 
-  // Convert body text to HTML, then inject the link
+  // Convert body text to HTML, then inject links
   let bodyHtml = textToHtml(interpolated.trim());
   bodyHtml = bodyHtml.replace(new RegExp(URL_TOKEN, "g"), linkHtml);
+  bodyHtml = bodyHtml.replace(new RegExp(HUB_TOKEN, "g"), hubHtml);
 
   const fullHtml = bodyHtml + (hasSig ? SIGNATUR_HTML : "");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0;padding:24px;background:#ffffff;font-family:Arial,sans-serif;color:#1a1a1a">${fullHtml}</body></html>`;
