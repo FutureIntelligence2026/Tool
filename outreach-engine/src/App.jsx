@@ -323,6 +323,12 @@ export default function App() {
   const [showMailPreview,setShowMailPreview]=useState(null); // {lead, step}
   const [filterStatus,setFilterStatus]=useState("all");
   const [filterIns,setFilterIns]=useState("all");
+  const [versichererUrls,setVersichererUrls]=useState(()=>{try{return JSON.parse(localStorage.getItem('ic_vurls')||'{}')}catch{return {}}});
+  const [vPreview,setVPreview]=useState(null); // insurer id
+  const [testMailModal,setTestMailModal]=useState(null); // {step}
+  const [testMailTo,setTestMailTo]=useState("");
+  const [testMailSending,setTestMailSending]=useState(false);
+  const [testMailResult,setTestMailResult]=useState(null);
 
   const activeAccounts=accounts.filter(a=>a.active);
 
@@ -459,9 +465,65 @@ export default function App() {
     );
   };
 
+  const saveVUrl=(id,url)=>{const u={...versichererUrls,[id]:url};setVersichererUrls(u);localStorage.setItem('ic_vurls',JSON.stringify(u));};
+
+  const sendTestMail=async()=>{
+    if(!testMailTo||!testMailModal)return;
+    const acc=activeAccounts[0];
+    const pass=accPasswords[acc?.id];
+    if(!acc||!pass){setTestMailResult("⚠ Bitte zuerst IMAP-Passwort bei Account eintragen.");return;}
+    const demoLead={lead:{vorname:"Max",nachname:"Mustermann",email:testMailTo,ort:"Berlin"},insurer:Object.keys(VERSICHERER)[0],previewUrl:Object.values(versichererUrls)[0]||""};
+    const mail=getEffectiveMail(demoLead,testMailModal.step);
+    setTestMailSending(true);setTestMailResult(null);
+    try{
+      const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:testMailTo,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
+      const data=await res.json();
+      setTestMailResult(data.ok?"✅ Test-Mail gesendet!":"❌ "+data.error);
+    }catch(e){setTestMailResult("❌ "+e.message);}
+    setTestMailSending(false);
+  };
+
   // ══════════════════════════════════════════════════════════════════════════
   return(
     <div style={S.app}>
+
+      {/* WEBSITE PREVIEW MODAL */}
+      {vPreview&&(
+        <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.7)",display:"flex",flexDirection:"column"}}>
+          <div style={{background:"#fff",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #e2e8f0",boxShadow:"0 2px 8px rgba(0,0,0,0.1)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:VERSICHERER[vPreview]?.primary}}/>
+              <span style={{fontWeight:700,fontSize:14,color:"#1e2532"}}>{VERSICHERER[vPreview]?.name} — Website Template</span>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <a href={versichererUrls[vPreview]} target="_blank" rel="noreferrer" style={{...S.btn(),textDecoration:"none",fontSize:12}}>↗ Neu öffnen</a>
+              <button style={S.btn("ghost")} onClick={()=>setVPreview(null)}>✕ Schließen</button>
+            </div>
+          </div>
+          {versichererUrls[vPreview]?<iframe src={versichererUrls[vPreview]} style={{flex:1,border:"none"}} title="Website Preview"/>:<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",background:"#f4f6f9",color:"#64748b",fontSize:14}}>Noch keine URL für {VERSICHERER[vPreview]?.name} eingetragen.</div>}
+        </div>
+      )}
+
+      {/* TEST MAIL MODAL */}
+      {testMailModal&&(
+        <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"#fff",borderRadius:16,padding:28,maxWidth:480,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+            <div style={{fontSize:16,fontWeight:700,color:"#1e2532",marginBottom:6}}>✉ Test-Mail senden</div>
+            <div style={{fontSize:13,color:"#64748b",marginBottom:20}}>Sendet Mail {testMailModal.step} mit Demo-Daten an deine Adresse</div>
+            <label style={S.lbl}>An (Test-E-Mail)</label>
+            <input value={testMailTo} onChange={e=>setTestMailTo(e.target.value)} placeholder="deine@email.de" style={{...S.inp(false),marginBottom:16}} onKeyDown={e=>e.key==="Enter"&&sendTestMail()}/>
+            <div style={{background:"#f8fafc",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#475569",marginBottom:16,border:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:600,marginBottom:2}}>Betreff-Vorschau:</div>
+              <div style={{color:"#1e2532"}}>{(templates.find(t=>t.step===testMailModal.step)?.subject||"").replace(/{{VORNAME}}/g,"Max").replace(/{{ORT}}/g,"Berlin").replace(/{{VERSICHERER}}/g,"SIGNAL IDUNA")}</div>
+            </div>
+            {testMailResult&&<div style={{padding:"8px 14px",borderRadius:8,marginBottom:14,fontSize:13,background:testMailResult.startsWith("✅")?"#f0fdf4":"#fff1f2",color:testMailResult.startsWith("✅")?"#15803d":"#dc2626",border:`1px solid ${testMailResult.startsWith("✅")?"#bbf7d0":"#fecaca"}`}}>{testMailResult}</div>}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button style={S.btn("ghost")} onClick={()=>{setTestMailModal(null);setTestMailResult(null);}}>Abbrechen</button>
+              <button style={S.btn()} onClick={sendTestMail} disabled={testMailSending||!testMailTo}>{testMailSending?"Sende...":"📤 Test senden"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL */}
       <MailPreviewModal/>
@@ -635,23 +697,47 @@ export default function App() {
               return(
                 <div style={S.card}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <div style={{display:"flex",alignItems:"center",gap:7}}><span style={S.pill(tpl.tagColor)}>Mail {tpl.step} · {tpl.tag}</span><span style={{fontSize:11,fontWeight:600,color:IC.white}}>{tpl.label}</span></div>
+                    <div style={{display:"flex",alignItems:"center",gap:7}}><span style={S.pill(tpl.tagColor)}>Mail {tpl.step} · {tpl.tag}</span><span style={{fontSize:14,fontWeight:600,color:"#1e2532"}}>{tpl.label}</span></div>
+                    <button style={{...S.btn("blue"),display:"flex",alignItems:"center",gap:6}} onClick={()=>{setTestMailModal({step:tpl.step});setTestMailResult(null);}}>✉ Test senden</button>
                   </div>
                   <div style={{marginBottom:10}}>
                     <label style={S.lbl}>Betreff</label>
-                    <input value={tpl.subject} onChange={e=>setTemplates(p=>p.map(t=>t.step===editingTpl?{...t,subject:e.target.value}:t))} style={S.inp(false)} onFocus={e=>e.target.style.borderColor=tpl.tagColor} onBlur={e=>e.target.style.borderColor="#1e1e14"}/>
+                    <input value={tpl.subject} onChange={e=>setTemplates(p=>p.map(t=>t.step===editingTpl?{...t,subject:e.target.value}:t))} style={S.inp(false)} onFocus={e=>e.target.style.borderColor=tpl.tagColor} onBlur={e=>e.target.style.borderColor="#cbd5e1"}/>
                   </div>
                   <div>
                     <label style={S.lbl}>Text</label>
-                    <textarea value={tpl.body} onChange={e=>setTemplates(p=>p.map(t=>t.step===editingTpl?{...t,body:e.target.value}:t))} style={{...S.ta,minHeight:260}} onFocus={e=>e.target.style.borderColor=tpl.tagColor} onBlur={e=>e.target.style.borderColor="#1e1e14"}/>
+                    <textarea value={tpl.body} onChange={e=>setTemplates(p=>p.map(t=>t.step===editingTpl?{...t,body:e.target.value}:t))} style={{...S.ta,minHeight:260}} onFocus={e=>e.target.style.borderColor=tpl.tagColor} onBlur={e=>e.target.style.borderColor="#cbd5e1"}/>
                   </div>
                   <div style={{display:"flex",gap:7,marginTop:8}}>
                     <button style={S.btn("ghost")} onClick={()=>{const d=DEFAULT_TEMPLATES.find(x=>x.step===editingTpl);if(d)setTemplates(p=>p.map(t=>t.step===editingTpl?{...t,subject:d.subject,body:d.body}:t));}}>↺ Reset</button>
-                    <div style={{fontSize:8,color:"#3a3830",display:"flex",alignItems:"center"}}>Änderungen sofort aktiv</div>
+                    <div style={{fontSize:12,color:"#64748b",display:"flex",alignItems:"center"}}>Änderungen sofort aktiv</div>
                   </div>
                 </div>
               );
             })()}
+
+            {/* ── WEBSITE TEMPLATES PRO VERSICHERER ── */}
+            <div style={S.card}>
+              <div style={{fontSize:14,fontWeight:700,color:"#1e2532",marginBottom:4}}>🌐 Website-Templates pro Versicherer</div>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>URL der Demo-Website eintragen — beim Lead-Click direkt vorschauen</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                {Object.values(VERSICHERER).map(v=>(
+                  <div key={v.id} style={{background:"#f8fafc",borderRadius:10,padding:"12px 14px",border:"1px solid #e2e8f0"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:v.primary,flexShrink:0}}/>
+                      <span style={{fontWeight:700,fontSize:13,color:"#1e2532"}}>{v.name}</span>
+                      {versichererUrls[v.id]&&<button style={{...S.btn("blue"),padding:"3px 10px",fontSize:11,marginLeft:"auto"}} onClick={()=>setVPreview(v.id)}>👁 Vorschau</button>}
+                    </div>
+                    <input
+                      value={versichererUrls[v.id]||""}
+                      onChange={e=>saveVUrl(v.id,e.target.value)}
+                      placeholder="https://name-versicherer.vercel.app"
+                      style={{...S.inp(false),fontSize:12,padding:"7px 10px"}}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
             {/* Signatur Vorschau */}
             <div style={S.card}>
               <div style={{fontSize:10,color:IC.gold,fontWeight:700,marginBottom:12}}>Signatur-Vorschau (automatisch in jeder Mail)</div>
