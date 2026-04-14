@@ -198,15 +198,15 @@ function interpolate(text, lead, insurerName, previewUrl) {
 }
 
 function textToHtml(text) {
-  // Convert plain text with \n\n paragraphs to email-safe HTML
+  // Real emails use <br/><br/> between paragraphs — no block margins, no sections
   const escaped = text
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  const paragraphs = escaped.split(/\n{2,}/);
-  const htmlParts = paragraphs.filter(p=>p.trim()).map(p => {
-    const lines = p.split("\n").join("<br/>");
-    return `<p style="margin:0 0 6px 0;line-height:1.65;color:#1a1a1a;font-size:15px;font-family:Arial,sans-serif">${lines}</p>`;
-  });
-  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.7;max-width:560px">${htmlParts.join("")}</div>`;
+  const html = escaped
+    .split(/\n{2,}/)
+    .filter(p => p.trim())
+    .map(p => p.split("\n").join("<br/>"))
+    .join("<br/><br/>");
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.7;max-width:560px">${html}</div>`;
 }
 
 function interpolateHtml(text, lead, insurerName, previewUrl) {
