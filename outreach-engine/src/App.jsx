@@ -211,14 +211,37 @@ function textToHtml(text) {
 }
 
 function interpolateHtml(text, lead, insurerName, previewUrl) {
-  const interpolated = interpolate(text, lead, insurerName, previewUrl);
-  // Split on signature, convert body to HTML, append HTML signature
-  const sigIdx = interpolated.indexOf(SIGNATUR_TEXT);
-  if (sigIdx >= 0) {
-    const bodyText = interpolated.slice(0, sigIdx).trim();
-    return textToHtml(bodyText) + SIGNATUR_HTML;
-  }
-  return textToHtml(interpolated);
+  // Split template at {{SIGNATUR}} BEFORE interpolation — 100% reliable
+  const tpl = text || "";
+  const sigMarker = tpl.indexOf("{{SIGNATUR}}");
+  const bodyTpl = sigMarker >= 0 ? tpl.slice(0, sigMarker) : tpl;
+  const hasSig = sigMarker >= 0;
+
+  // URL → clickable link with insurer + agent name
+  const URL_TOKEN = "__ICURL__";
+  const agentName = [lead?.vorname, lead?.nachname].filter(Boolean).join(" ");
+  const linkLabel = [insurerName, agentName].filter(Boolean).join(" — ");
+  const linkHtml = previewUrl
+    ? `<a href="${previewUrl}" style="color:#f97316;font-weight:700;text-decoration:none">👉 ${linkLabel || previewUrl}</a>`
+    : "";
+
+  // Replace {{URL}} with token (no HTML special chars → survives escaping)
+  const bodyWithToken = bodyTpl.replace(/\{\{URL\}\}/g, URL_TOKEN);
+
+  // Interpolate all other placeholders
+  const interpolated = bodyWithToken
+    .replace(/\{\{VORNAME\}\}/g,     lead?.vorname    || "")
+    .replace(/\{\{NACHNAME\}\}/g,    lead?.nachname   || "")
+    .replace(/\{\{ORT\}\}/g,         lead?.ort        || "")
+    .replace(/\{\{VERSICHERER\}\}/g, insurerName      || "")
+    .replace(/\{\{HUBSPOT\}\}/g,     IC.hubspot);
+
+  // Convert body text to HTML, then inject the link
+  let bodyHtml = textToHtml(interpolated.trim());
+  bodyHtml = bodyHtml.replace(new RegExp(URL_TOKEN, "g"), linkHtml);
+
+  const fullHtml = bodyHtml + (hasSig ? SIGNATUR_HTML : "");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0;padding:24px;background:#ffffff;font-family:Arial,sans-serif;color:#1a1a1a">${fullHtml}</body></html>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
