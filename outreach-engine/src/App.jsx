@@ -591,10 +591,9 @@ export default function App() {
 
   const [testSmtpPass,setTestSmtpPass]=useState("");
 
-  const buildDemoMail=async(step)=>{
-    const insId=Object.keys(VERSICHERER)[0];
+  const buildDemoMail=async(step,insId)=>{
     const demoData={vorname:"Max",nachname:"Mustermann",email:testMailTo||"test@example.de",ort:"Berlin"};
-    const shortUrl=await shortenUrl(generatePreviewUrl(demoData,insId));
+    const shortUrl=await shortenUrl(generatePreviewUrl(demoData,insId),makeAlias(demoData,insId));
     const demoLead={lead:demoData,insurer:insId,previewUrl:shortUrl};
     return getEffectiveMail(demoLead,step);
   };
@@ -609,7 +608,7 @@ export default function App() {
     }
     // Save password for future use
     if(testSmtpPass) setAccPasswords(p=>({...p,[acc.id]:testSmtpPass}));
-    const mail=await buildDemoMail(testMailModal.step);
+    const mail=await buildDemoMail(testMailModal.step, testMailModal.insId||Object.keys(VERSICHERER)[0]);
     setTestMailSending(true);setTestMailResult(null);
     try{
       const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:testMailTo,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
@@ -668,6 +667,11 @@ export default function App() {
             <div style={{fontSize:16,fontWeight:700,color:"#1e2532",marginBottom:4}}>📤 Test-Mail senden — Mail {testMailModal.step}</div>
             <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Wird gesendet von <strong>website@iconicone.de</strong> (Strato SMTP)</div>
 
+            <label style={S.lbl}>Versicherung (für Vorschau)</label>
+            <select value={testMailModal.insId||Object.keys(VERSICHERER)[0]} onChange={e=>setTestMailModal(p=>({...p,insId:e.target.value}))} style={{...S.inp(false),marginBottom:12}}>
+              {Object.values(VERSICHERER).map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+
             <label style={S.lbl}>Deine E-Mail (Empfänger)</label>
             <input value={testMailTo} onChange={e=>setTestMailTo(e.target.value)} placeholder="deine@gmail.com" style={{...S.inp(false),marginBottom:12}} autoFocus/>
 
@@ -686,7 +690,7 @@ export default function App() {
 
             <div style={{background:"#f8fafc",borderRadius:8,padding:"9px 12px",fontSize:11,color:"#475569",marginBottom:14,border:"1px solid #e2e8f0"}}>
               <span style={{fontWeight:600}}>Betreff: </span>
-              {(templates.find(t=>t.step===testMailModal.step)?.subject||"").replace(/{{VORNAME}}/g,"Max").replace(/{{NACHNAME}}/g,"Mustermann").replace(/{{ORT}}/g,"Berlin").replace(/{{VERSICHERER}}/g,"SIGNAL IDUNA")}
+              {(templates.find(t=>t.step===testMailModal.step)?.subject||"").replace(/{{VORNAME}}/g,"Max").replace(/{{NACHNAME}}/g,"Mustermann").replace(/{{ORT}}/g,"Berlin").replace(/{{VERSICHERER}}/g,VERSICHERER[testMailModal.insId||Object.keys(VERSICHERER)[0]]?.name||"")}
             </div>
 
             {testMailResult&&<div style={{padding:"8px 12px",borderRadius:8,marginBottom:12,fontSize:13,background:testMailResult.startsWith("✅")?"#f0fdf4":"#fff1f2",color:testMailResult.startsWith("✅")?"#15803d":"#dc2626",border:`1px solid ${testMailResult.startsWith("✅")?"#bbf7d0":"#fecaca"}`}}>{testMailResult}</div>}
@@ -891,7 +895,7 @@ export default function App() {
                 <div style={S.card}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:7}}><span style={S.pill(tpl.tagColor)}>Mail {tpl.step} · {tpl.tag}</span><span style={{fontSize:14,fontWeight:600,color:"#1e2532"}}>{tpl.label}</span></div>
-                    <button style={{...S.btn("blue"),display:"flex",alignItems:"center",gap:6}} onClick={()=>{setTestMailModal({step:tpl.step});setTestMailResult(null);}}>✉ Test senden</button>
+                    <button style={{...S.btn("blue"),display:"flex",alignItems:"center",gap:6}} onClick={()=>{setTestMailModal({step:tpl.step,insId:selIns||Object.keys(VERSICHERER)[0]});setTestMailResult(null);}}>✉ Test senden</button>
                   </div>
                   <div style={{marginBottom:10}}>
                     <label style={S.lbl}>Betreff</label>
