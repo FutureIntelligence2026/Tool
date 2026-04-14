@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-const TEMPLATE_VERSION = "v7";
+const TEMPLATE_VERSION = "v8";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ICONICONE BRAND KONFIG — direkt von iconicone.de
@@ -99,6 +99,7 @@ Viele Grüße
 
 kurze Nachfrage — haben Sie die Website gesehen?
 {{URL}}
+
 Was Sie bekommen:
 ✓ SEO-optimiert — damit Sie bei Google in {{ORT}} gefunden werden
 ✓ Conversion-optimiert — damit Besucher zu echten Anfragen werden
@@ -113,6 +114,7 @@ Einmalig 499€. Kein Abo. Keine Folgekosten. Fertig in 24h.
 
 Termin buchen — 15 Minuten reichen:
 {{HUBSPOT}}
+
 Viele Grüße
 {{SIGNATUR}}`,
   },
@@ -128,10 +130,12 @@ Die meisten {{VERSICHERER}}-Berater, die ich kenne, sagen: kaum bis keine. Weil 
 
 Genau das löst die Seite, die ich für Sie erstellt habe:
 {{URL}}
+
 499€ einmalig. SEO eingebaut. Neue Anfragen laufen automatisch zu Ihnen.
 
 Möchten Sie das kurz besprechen?
 {{HUBSPOT}}
+
 Oder einfach antworten — ich erkläre alles in 15 Minuten.
 
 Viele Grüße
@@ -145,12 +149,14 @@ Viele Grüße
 
 ich melde mich ein letztes Mal wegen Ihrer Website:
 {{URL}}
+
 Ich frage, weil ich in {{ORT}} aktuell nur eine Seite für {{VERSICHERER}}-Berater livesetze — und ich diese Möglichkeit nicht an Ihnen vorbeigehen lassen wollte.
 
 499€ einmalig. In 24h live.
 
 Falls es passt:
 {{HUBSPOT}}
+
 Falls nicht — kein Problem, ich melde mich nicht mehr.
 
 Viele Grüße
@@ -166,6 +172,7 @@ ich nehme Sie aus meinen Nachrichten raus — Sie hören nichts mehr von mir.
 
 Die Website bleibt noch eine Weile online, falls Sie irgendwann Interesse haben:
 {{URL}}
+
 Falls sich Ihre Situation ändert, melden Sie sich gerne:
 🌐 ${IC.url}
 📞 ${IC.tel}
@@ -191,15 +198,13 @@ function interpolate(text, lead, insurerName, previewUrl) {
 }
 
 function textToHtml(text) {
-  // Real emails use <br/><br/> between paragraphs — no block margins, no sections
   const escaped = text
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  const html = escaped
+  const paras = escaped
     .split(/\n{2,}/)
     .filter(p => p.trim())
-    .map(p => p.split("\n").join("<br/>"))
-    .join("<br/><br/>");
-  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.7;max-width:560px">${html}</div>`;
+    .map(p => `<p style="margin:0 0 14px 0;padding:0;">${p.split("\n").join("<br/>")}</p>`);
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.7;max-width:560px">${paras.join("")}</div>`;
 }
 
 function interpolateHtml(text, lead, insurerName, previewUrl, displayUrl) {
