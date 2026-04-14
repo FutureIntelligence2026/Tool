@@ -25,11 +25,20 @@ export default async function handler(req, res) {
       },
     });
 
+    const fromAddress = smtp.fromName
+      ? `"${smtp.fromName}" <${smtp.user}>`
+      : smtp.user;
+
     await transporter.sendMail({
-      from: smtp.user,
+      from: fromAddress,
       to,
       subject,
       html: html || subject,
+      headers: {
+        "X-Mailer": "ICONICONE Outreach",
+        "X-Priority": "3",
+        "Precedence": "bulk",
+      },
     });
 
     return res.status(200).json({ ok: true });

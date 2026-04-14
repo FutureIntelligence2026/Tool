@@ -451,11 +451,16 @@ export default function App() {
   useEffect(()=>{try{localStorage.setItem("ic_templates",JSON.stringify(templates));localStorage.setItem("ic_tplver",TEMPLATE_VERSION);}catch(e){}},[templates]);
   useEffect(()=>{try{localStorage.setItem("ic_passwords",JSON.stringify(accPasswords));}catch(e){}},[accPasswords]);
 
-  // ── AUTO-SEND: every 60s check for due sequence steps and send via SMTP ──
+  // ── AUTO-SEND: every 2 min, max 1 mail per run to avoid spam filters ──────
+  // lastSentRef[accountId] = timestamp of last send for that account
+  const lastSentRef=useRef({});
   useEffect(()=>{
+    // Min gap between sends PER ACCOUNT = 2 minutes (anti-spam)
+    const SEND_GAP_MS=2*60*1000;
     const run=async()=>{
       const now=new Date();
-      for(const lead of leads){
+      let sentThisRun=0;
+      outer:for(const lead of leads){
         if(lead.status==="archived"||lead.status==="replied"||lead.status==="stopped")continue;
         for(const seq of (lead.sequence||[])){
           if(seq.status!=="scheduled"||!seq.scheduledAt)continue;
@@ -464,10 +469,14 @@ export default function App() {
           if(!acc)continue;
           const pass=accPasswords[acc.id];
           if(!pass)continue;
+          // Enforce per-account gap to avoid spam
+          const lastSent=lastSentRef.current[acc.id]||0;
+          if(Date.now()-lastSent<SEND_GAP_MS)continue;
           const mail=getEffectiveMail(lead,seq.step);
           try{
-            const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:lead.lead.email,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
+            const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:lead.lead.email,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass,fromName:acc.name||IC.name}})});
             const data=await res.json();
+            lastSentRef.current[acc.id]=Date.now();
             if(data.ok){
               setLeads(p=>p.map(l=>{
                 if(l.id!==lead.id)return l;
@@ -482,15 +491,19 @@ export default function App() {
               }));
             }
           }catch(e){
+            lastSentRef.current[acc.id]=Date.now();
             setLeads(p=>p.map(l=>{
               if(l.id!==lead.id)return l;
               return{...l,sequence:l.sequence.map(s=>s.step===seq.step?{...s,status:"failed",failedAt:new Date(),failReason:e?.message||"Netzwerkfehler"}:s)};
             }));
           }
+          sentThisRun++;
+          // Max 1 mail per 2-min run — next one fires in next interval
+          if(sentThisRun>=1)break outer;
         }
       }
     };
-    const id=setInterval(run,60000);
+    const id=setInterval(run,2*60*1000);
     return()=>clearInterval(id);
   },[leads,accounts,accPasswords,templates]);
 
