@@ -451,14 +451,48 @@ export default function App() {
   useEffect(()=>{try{localStorage.setItem("ic_templates",JSON.stringify(templates));localStorage.setItem("ic_tplver",TEMPLATE_VERSION);}catch(e){}},[templates]);
   useEffect(()=>{try{localStorage.setItem("ic_passwords",JSON.stringify(accPasswords));}catch(e){}},[accPasswords]);
 
-  // ── AUTO-SEND: every 2 min, max 1 mail per run to avoid spam filters ──────
-  // lastSentRef[accountId] = timestamp of last send for that account
+  // ── AUTO-SEND: every 2 min, strict 08-18 Uhr, max 30/Tag, max 1 pro Run ────
   const lastSentRef=useRef({});
   useEffect(()=>{
-    // Min gap between sends PER ACCOUNT = 2 minutes (anti-spam)
-    const SEND_GAP_MS=2*60*1000;
+    const SEND_GAP_MS=2*60*1000; // min 2 Min Abstand pro Account
+    const HOUR_START=8, HOUR_END=18, DAY_MAX=30;
+
+    // Nächsten freien Slot morgen früh (08:05–08:55) berechnen
+    const nextMorningSlot=()=>{
+      const d=new Date();
+      d.setDate(d.getDate()+1);
+      d.setHours(HOUR_START,5+Math.floor(Math.random()*50),0,0);
+      return d;
+    };
+
     const run=async()=>{
       const now=new Date();
+      const hour=now.getHours();
+
+      // ── Außerhalb Geschäftszeiten: überfällige Mails auf morgen früh verschieben
+      if(hour<HOUR_START||hour>=HOUR_END){
+        setLeads(p=>p.map(lead=>{
+          if(lead.status==="archived"||lead.status==="replied"||lead.status==="stopped")return lead;
+          const changed=lead.sequence?.some(s=>s.status==="scheduled"&&s.scheduledAt&&new Date(s.scheduledAt)<=now);
+          if(!changed)return lead;
+          return{...lead,sequence:lead.sequence.map(s=>{
+            if(s.status==="scheduled"&&s.scheduledAt&&new Date(s.scheduledAt)<=now)
+              return{...s,scheduledAt:nextMorningSlot()};
+            return s;
+          })};
+        }));
+        return;
+      }
+
+      // ── Heute bereits gesendete Mails pro Account zählen
+      const todayStr=now.toDateString();
+      const sentToday={};
+      for(const lead of leads)
+        for(const s of (lead.sequence||[]))
+          if(s.status==="sent"&&s.sentAt&&new Date(s.sentAt).toDateString()===todayStr)
+            sentToday[s.accountId]=(sentToday[s.accountId]||0)+1;
+
+      // ── Eine Mail pro Run senden
       let sentThisRun=0;
       outer:for(const lead of leads){
         if(lead.status==="archived"||lead.status==="replied"||lead.status==="stopped")continue;
@@ -469,15 +503,26 @@ export default function App() {
           if(!acc)continue;
           const pass=accPasswords[acc.id];
           if(!pass)continue;
-          // Enforce per-account gap to avoid spam
+          // Tageslimit 30/Account prüfen
+          if((sentToday[acc.id]||0)>=DAY_MAX){
+            // Limit erreicht — auf morgen verschieben
+            setLeads(p=>p.map(l=>{
+              if(l.id!==lead.id)return l;
+              return{...l,sequence:l.sequence.map(s=>s.step===seq.step?{...s,scheduledAt:nextMorningSlot()}:s)};
+            }));
+            continue;
+          }
+          // 2-Min Mindestabstand pro Account prüfen
           const lastSent=lastSentRef.current[acc.id]||0;
           if(Date.now()-lastSent<SEND_GAP_MS)continue;
+
           const mail=getEffectiveMail(lead,seq.step);
           try{
             const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:lead.lead.email,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass,fromName:acc.name||IC.name}})});
             const data=await res.json();
             lastSentRef.current[acc.id]=Date.now();
             if(data.ok){
+              sentToday[acc.id]=(sentToday[acc.id]||0)+1;
               setLeads(p=>p.map(l=>{
                 if(l.id!==lead.id)return l;
                 const s2=l.sequence.map(s=>s.step===seq.step?{...s,status:"sent",sentAt:new Date()}:s);
@@ -498,8 +543,7 @@ export default function App() {
             }));
           }
           sentThisRun++;
-          // Max 1 mail per 2-min run — next one fires in next interval
-          if(sentThisRun>=1)break outer;
+          if(sentThisRun>=1)break outer; // Max 1 pro 2-Min-Run
         }
       }
     };
