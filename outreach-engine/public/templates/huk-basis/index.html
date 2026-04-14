@@ -49,12 +49,12 @@
   <style>
     :root {
       --primary: #FFB300;
-      --primary-dark: #cc8a00;
+      --primary-dark: #cc8c00;
       --primary-light: #FFD54F;
-      --accent: #1a1200;
-      --accent-dark: #000000;
+      --accent: #FFE082;
+      --accent-dark: #FFB300;
       --primary-rgb: 255, 179, 0;
-      --accent-rgb: 26, 18, 0;
+      --accent-rgb: 255, 224, 130;
       --gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 50%, var(--accent) 100%);
       --gradient-btn: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
       --gradient-hover: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%);
@@ -70,13 +70,12 @@
       --font-headline: 'Plus Jakarta Sans', sans-serif;
       --font-body: 'Inter', sans-serif;
       --shadow-card: 0 2px 16px rgba(255,179,0,0.10);
-      --shadow-card-hover: 0 8px 40px rgba(255,179,0,0.20);
+      --shadow-card-hover: 0 8px 40px rgba(255,179,0,0.22);
     }
 
 
-    .nav-logo { color: #1a1200 !important; }
-    .nav-links a { color: #1a1200 !important; }
-    .nav-cta { /* inherits accent */ }
+    .nav-logo { color: #1a1400 !important; }
+    .nav-links a { color: #1a1400 !important; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { overflow-x: hidden; scroll-behavior: smooth; }
     body {
@@ -243,7 +242,7 @@
     }
     .hero-overlay {
       position: absolute; inset: 0;
-      background: linear-gradient(135deg, rgba(60,45,0,0.82) 0%, rgba(100,75,0,0.55) 60%, rgba(255,179,0,0.3) 100%);
+      background: linear-gradient(135deg, rgba(40,28,0,0.82) 0%, rgba(80,56,0,0.60) 60%, rgba(180,110,0,0.30) 100%);
       z-index: 1;
     }
     .hero-content {
@@ -1084,12 +1083,7 @@
           </ul>
         </div>
       </div>
-      <div class="footer-bottom">
-        <p>© 2025 {{VORNAME}} {{NACHNAME}} – HUK-COBURG Versicherungspartner</p>
-        <div class="footer-legal-links">
-          <a href="#" onclick="showPage('impressum'); return false;">Impressum</a>
-          <a href="#" onclick="showPage('datenschutz'); return false;">Datenschutz</a>
-        </div>
+      
       </div>
     </div>
   </footer>
@@ -1235,7 +1229,7 @@
       `Nachricht:\n${nachricht}`
     );
 
-    window.location.href = `mailto:${window.__contactEmail || "{{EMAIL}}"}?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:${window.__contactEmail||""}?subject=${subject}&body=${body}`;
 
     form.style.display = 'none';
     document.getElementById('formSuccess').style.display = 'block';
@@ -1274,67 +1268,40 @@
     'OEZEITEN':    p.get('oz') || '',
   };
 
-  // Replace {{KEY}} in text nodes throughout the DOM
+  // Set email for handleSubmit
+  if (map['EMAIL']) window.__contactEmail = map['EMAIL'];
+
+  function replaceAll(str) {
+    for (var key in map) {
+      if (map[key]) str = str.split('{{' + key + '}}').join(map[key]);
+    }
+    return str;
+  }
+
   function walk(node) {
-    if (node.nodeType === 3) { // text node
+    if (node.nodeType === 3) {
       var t = node.textContent;
-      var changed = false;
-      for (var key in map) {
-        if (map[key] && t.indexOf('{{' + key + '}}') >= 0) {
-          t = t.split('{{' + key + '}}').join(map[key]);
-          changed = true;
-        }
-      }
-      if (changed) node.textContent = t;
+      var r = replaceAll(t);
+      if (r !== t) node.textContent = r;
     } else if (node.nodeType === 1) {
-      // Replace in href, src, content, alt attributes
-      var attrs = ['href','src','content','alt','title','placeholder','value','action'];
-      for (var ai = 0; ai < attrs.length; ai++) {
-        var attr = attrs[ai];
-        if (node.hasAttribute(attr)) {
-          var val = node.getAttribute(attr);
-          var changed2 = false;
-          for (var key2 in map) {
-            if (map[key2] && val.indexOf('{{' + key2 + '}}') >= 0) {
-              val = val.split('{{' + key2 + '}}').join(map[key2]);
-              changed2 = true;
-            }
-          }
-          if (changed2) node.setAttribute(attr, val);
+      var attrs = ['href','src','content','alt','title','placeholder','value'];
+      for (var i = 0; i < attrs.length; i++) {
+        if (node.hasAttribute(attrs[i])) {
+          var v = node.getAttribute(attrs[i]);
+          var rv = replaceAll(v);
+          if (rv !== v) node.setAttribute(attrs[i], rv);
         }
       }
       for (var c = node.firstChild; c; c = c.nextSibling) walk(c);
     }
   }
 
-  // Also fix the handleSubmit mailto — replace {{EMAIL}} in script strings
-  // by patching the global variable before first use
-  if (map['EMAIL']) {
-    window.__contactEmail = map['EMAIL'];
-  }
-
   document.addEventListener('DOMContentLoaded', function() {
     walk(document.body);
-
-    // Update document title too
-    var title = document.title;
-    for (var key in map) {
-      if (map[key]) title = title.split('{{' + key + '}}').join(map[key]);
-    }
-    document.title = title;
-
-    // Patch tel links
-    if (map['TELEFON']) {
-      var telClean = map['TELEFON'].replace(/[\s\-\(\)\+]/g, '');
-      document.querySelectorAll('a[href^="tel:"]').forEach(function(a) {
-        if (a.getAttribute('href').indexOf('{{') >= 0 || a.getAttribute('href') === 'tel:') {
-          a.href = 'tel:' + telClean;
-        }
-      });
-    }
+    document.title = replaceAll(document.title);
   });
 })();
 </script>
 
 </body>
-</html> guck dir das hier an vroname udn nachname die vorrichtung erkenntd as toool dann autoantaihc ich möchte ddie vrrichtung mit nummer voirnam nachnem genauso haben für die 6 tempkates ansonsten ncihts ändern und anshcließen auf gthub hochladne
+</html>
