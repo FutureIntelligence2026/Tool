@@ -1,0 +1,10 @@
+{
+  "name": "iconicone-reply-tracker",
+  "version": "1.0.0",
+  "description": "ICONICONE Reply Tracker — checks IMAP for lead replies",
+  "type": "module",
+  "dependencies": {
+    "imapflow": "^1.0.164"
+  },
+  "engines": { "node": ">=18" }
+}
