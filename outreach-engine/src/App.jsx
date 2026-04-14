@@ -526,32 +526,29 @@ export default function App() {
     );
   };
 
+  const [testSmtpPass,setTestSmtpPass]=useState("");
+
   const buildDemoMail=(step)=>{
     const demoLead={lead:{vorname:"Max",nachname:"Mustermann",email:testMailTo||"test@example.de",ort:"Berlin"},insurer:Object.keys(VERSICHERER)[0],previewUrl:""};
     return getEffectiveMail(demoLead,step);
   };
 
-  const openMailApp=()=>{
-    if(!testMailModal)return;
-    const mail=buildDemoMail(testMailModal.step);
-    // Truncate body to avoid mailto: length limit (~2000 chars)
-    const bodyShort=mail.body.replace(SIGNATUR_TEXT,"").trim().slice(0,1800);
-    const url=`mailto:${encodeURIComponent(testMailTo||"")}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(bodyShort)}`;
-    window.location.href=url;
-    setTestMailResult("✅ Mail-App geöffnet — bitte manuell absenden.");
-  };
-
   const sendTestMail=async()=>{
     if(!testMailTo||!testMailModal)return;
     const acc=activeAccounts[0];
-    const pass=accPasswords[acc?.id];
-    if(!acc||!pass){openMailApp();return;}
+    const pass=testSmtpPass||accPasswords[acc?.id]||"";
+    if(!acc||!pass){
+      setTestMailResult("⚠ Bitte Passwort für website@iconicone.de eingeben.");
+      return;
+    }
+    // Save password for future use
+    if(testSmtpPass) setAccPasswords(p=>({...p,[acc.id]:testSmtpPass}));
     const mail=buildDemoMail(testMailModal.step);
     setTestMailSending(true);setTestMailResult(null);
     try{
       const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:testMailTo,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
       const data=await res.json();
-      setTestMailResult(data.ok?"✅ Test-Mail gesendet!":"❌ "+data.error);
+      setTestMailResult(data.ok?"✅ Gesendet! Checke dein Postfach.":"❌ "+data.error);
     }catch(e){setTestMailResult("❌ "+e.message);}
     setTestMailSending(false);
   };
@@ -601,30 +598,40 @@ export default function App() {
       {/* TEST MAIL MODAL */}
       {testMailModal&&(
         <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div style={{background:"#fff",borderRadius:16,padding:28,maxWidth:480,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
-            <div style={{fontSize:16,fontWeight:700,color:"#1e2532",marginBottom:6}}>✉ Test-Mail senden — Mail {testMailModal.step}</div>
-            <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Demo-Daten: Max Mustermann, Berlin</div>
-            <label style={S.lbl}>An (deine E-Mail-Adresse)</label>
-            <input value={testMailTo} onChange={e=>setTestMailTo(e.target.value)} placeholder="deine@gmail.com" style={{...S.inp(false),marginBottom:12}} onKeyDown={e=>e.key==="Enter"&&openMailApp()}/>
-            <div style={{background:"#f8fafc",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#475569",marginBottom:14,border:"1px solid #e2e8f0"}}>
-              <div style={{fontWeight:600,marginBottom:2}}>Betreff:</div>
-              <div style={{color:"#1e2532"}}>{(templates.find(t=>t.step===testMailModal.step)?.subject||"").replace(/{{VORNAME}}/g,"Max").replace(/{{NACHNAME}}/g,"Mustermann").replace(/{{ORT}}/g,"Berlin").replace(/{{VERSICHERER}}/g,"SIGNAL IDUNA")}</div>
+          <div style={{background:"#fff",borderRadius:16,padding:28,maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+            <div style={{fontSize:16,fontWeight:700,color:"#1e2532",marginBottom:4}}>📤 Test-Mail senden — Mail {testMailModal.step}</div>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:18}}>Wird gesendet von <strong>website@iconicone.de</strong> (Strato SMTP)</div>
+
+            <label style={S.lbl}>Deine E-Mail (Empfänger)</label>
+            <input value={testMailTo} onChange={e=>setTestMailTo(e.target.value)} placeholder="deine@gmail.com" style={{...S.inp(false),marginBottom:12}} autoFocus/>
+
+            <label style={S.lbl}>
+              Passwort für website@iconicone.de
+              {accPasswords[activeAccounts[0]?.id]&&<span style={{color:"#10b981",fontWeight:400}}> ✓ gespeichert</span>}
+            </label>
+            <input
+              type="password"
+              value={testSmtpPass||(accPasswords[activeAccounts[0]?.id]||"")}
+              onChange={e=>setTestSmtpPass(e.target.value)}
+              placeholder={accPasswords[activeAccounts[0]?.id]?"••••••••• (gespeichert)":"Strato-Passwort eingeben"}
+              style={{...S.inp(false),marginBottom:14}}
+              onKeyDown={e=>e.key==="Enter"&&sendTestMail()}
+            />
+
+            <div style={{background:"#f8fafc",borderRadius:8,padding:"9px 12px",fontSize:11,color:"#475569",marginBottom:14,border:"1px solid #e2e8f0"}}>
+              <span style={{fontWeight:600}}>Betreff: </span>
+              {(templates.find(t=>t.step===testMailModal.step)?.subject||"").replace(/{{VORNAME}}/g,"Max").replace(/{{NACHNAME}}/g,"Mustermann").replace(/{{ORT}}/g,"Berlin").replace(/{{VERSICHERER}}/g,"SIGNAL IDUNA")}
             </div>
-            {testMailResult&&<div style={{padding:"8px 14px",borderRadius:8,marginBottom:12,fontSize:13,background:testMailResult.startsWith("✅")?"#f0fdf4":"#fff1f2",color:testMailResult.startsWith("✅")?"#15803d":"#dc2626",border:`1px solid ${testMailResult.startsWith("✅")?"#bbf7d0":"#fecaca"}`}}>{testMailResult}</div>}
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
-              <button style={S.btn("ghost")} onClick={()=>{setTestMailModal(null);setTestMailResult(null);}}>Abbrechen</button>
-              <button style={{...S.btn("blue"),display:"flex",alignItems:"center",gap:5}} onClick={openMailApp} disabled={!testMailTo}>
-                📬 In Mail-App öffnen
+
+            {testMailResult&&<div style={{padding:"8px 12px",borderRadius:8,marginBottom:12,fontSize:13,background:testMailResult.startsWith("✅")?"#f0fdf4":"#fff1f2",color:testMailResult.startsWith("✅")?"#15803d":"#dc2626",border:`1px solid ${testMailResult.startsWith("✅")?"#bbf7d0":"#fecaca"}`}}>{testMailResult}</div>}
+
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button style={S.btn("ghost")} onClick={()=>{setTestMailModal(null);setTestMailResult(null);setTestSmtpPass("");}}>Abbrechen</button>
+              <button style={S.btn()} onClick={sendTestMail} disabled={testMailSending||!testMailTo}>
+                {testMailSending?"Wird gesendet…":"📤 Jetzt senden"}
               </button>
-              {activeAccounts[0]&&accPasswords[activeAccounts[0].id]&&(
-                <button style={S.btn()} onClick={sendTestMail} disabled={testMailSending||!testMailTo}>
-                  {testMailSending?"Sende...":"📤 Direkt senden (SMTP)"}
-                </button>
-              )}
             </div>
-            <div style={{fontSize:10,color:"#94a3b8",marginTop:10,textAlign:"right"}}>
-              "In Mail-App öffnen" funktioniert mit Gmail, Outlook, Apple Mail & Co.
-            </div>
+            <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>Das Passwort wird nach dem Senden lokal gespeichert.</div>
           </div>
         </div>
       )}
