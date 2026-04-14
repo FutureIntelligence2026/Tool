@@ -209,7 +209,7 @@ function textToHtml(text) {
   return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.7;max-width:560px">${html}</div>`;
 }
 
-function interpolateHtml(text, lead, insurerName, previewUrl) {
+function interpolateHtml(text, lead, insurerName, previewUrl, displayUrl) {
   // Split template at {{SIGNATUR}} BEFORE interpolation — 100% reliable
   const tpl = text || "";
   const sigMarker = tpl.indexOf("{{SIGNATUR}}");
@@ -219,9 +219,8 @@ function interpolateHtml(text, lead, insurerName, previewUrl) {
   // URL → clickable link
   const URL_TOKEN = "__ICURL__";
   const HUB_TOKEN = "__ICHUB__";
-  const displayUrl = previewUrl ? "www." + previewUrl.replace(/^https?:\/\/(www\.)?/, "") : "";
   const linkHtml = previewUrl
-    ? `<a href="${previewUrl}" style="color:#f97316;font-weight:700;text-decoration:none">👉 ${displayUrl}</a>`
+    ? `<a href="${previewUrl}" style="color:#f97316;font-weight:700;text-decoration:none">👉 ${displayUrl||("www."+previewUrl.replace(/^https?:\/\/(www\.)?/,""))}</a>`
     : "";
   const hubHtml = `<a href="${IC.hubspot}" style="color:#f97316;font-weight:700;text-decoration:none">👉 Termin buchen — 15 Minuten</a>`;
 
@@ -596,8 +595,8 @@ export default function App() {
     if(!validateLead(leadForm))return;
     const dup=findDup(leadForm.email);
     if(dup){setDupModal([{existing:dup,newLead:null,form:leadForm,insId:selIns}]);return;}
-    const nl=makeLead(leadForm,selIns);const su=await shortenUrl(nl.previewUrl,makeAlias(leadForm,selIns));
-    setLeads(p=>[...p,{...nl,previewUrl:su}]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");
+    const nl=makeLead(leadForm,selIns);
+    setLeads(p=>[...p,nl]);setLeadForm(EMPTY_LEAD);setFormErrors({});setTab("leads");
   };
   const importCSV=async()=>{
     const lines=csvText.trim().split("\n").filter(Boolean).slice(1);const log=[];
@@ -610,9 +609,8 @@ export default function App() {
       log.push({name:`${vorname} ${nachname}`,ins:VERSICHERER[det]?.name,auto:!!detectFromRow(parts)});
       return makeLead(ld,det);
     }).filter(Boolean);
-    const shortened=await Promise.all(nl.map(async l=>({...l,previewUrl:await shortenUrl(l.previewUrl,makeAlias(l.lead,l.insurer))})));
-    const dups=shortened.filter(nl=>leads.some(l=>l.lead.email?.toLowerCase()===nl.lead.email?.toLowerCase()));
-    const clean=shortened.filter(nl=>!leads.some(l=>l.lead.email?.toLowerCase()===nl.lead.email?.toLowerCase()));
+    const dups=nl.filter(nl=>leads.some(l=>l.lead.email?.toLowerCase()===nl.lead.email?.toLowerCase()));
+    const clean=nl.filter(nl=>!leads.some(l=>l.lead.email?.toLowerCase()===nl.lead.email?.toLowerCase()));
     setLeads(p=>[...p,...clean]);
     if(dups.length)setDupModal(dups.map(nl=>({existing:leads.find(l=>l.lead.email?.toLowerCase()===nl.lead.email?.toLowerCase()),newLead:nl})));
     setDetectLog(log);setCsvText("");setTab("leads");
@@ -627,17 +625,18 @@ export default function App() {
   const clearOverride=(lid,step)=>setLeads(p=>p.map(l=>l.id!==lid?l:{...l,mailOverrides:{...l.mailOverrides,[step]:undefined}}));
   const archiveLead=id=>setLeads(p=>p.map(l=>l.id!==id?l:{...l,status:l.status==="archived"?"active":"archived"}));
   const startEditLead=lead=>{setEditLeadId(lead.id);setEditLeadForm({...lead.lead});};
-  const saveEditLead=async()=>{if(!editLeadId||!editLeadForm)return;const insId=leads.find(l=>l.id===editLeadId)?.insurer;const su=await shortenUrl(generatePreviewUrl(editLeadForm,insId),makeAlias(editLeadForm,insId));setLeads(p=>p.map(l=>l.id!==editLeadId?l:{...l,lead:{...editLeadForm},previewUrl:su}));setEditLeadId(null);setEditLeadForm(null);};
+  const saveEditLead=()=>{if(!editLeadId||!editLeadForm)return;setLeads(p=>p.map(l=>l.id!==editLeadId?l:{...l,lead:{...editLeadForm}}));setEditLeadId(null);setEditLeadForm(null);};
 
   const getEffectiveMail=(lead,step)=>{
     const tpl=templates.find(t=>t.step===step);
     const ov=lead.mailOverrides?.[step];
     const ins=VERSICHERER[lead.insurer]?.name||"";
-    const url=lead.previewUrl||generatePreviewUrl(lead.lead,lead.insurer);
+    const url=generatePreviewUrl(lead.lead,lead.insurer)||lead.previewUrl||"";
+    const displayUrl=lead.insurer?`www.${makeAlias(lead.lead,lead.insurer)}.iconicone.de`:"";
     return{
       subject:interpolate(ov?.subject??tpl?.subject??"",lead.lead,ins,url),
       body:interpolate(ov?.body??tpl?.body??"",lead.lead,ins,url),
-      bodyHtml:interpolateHtml(ov?.body??tpl?.body??"",lead.lead,ins,url),
+      bodyHtml:interpolateHtml(ov?.body??tpl?.body??"",lead.lead,ins,url,displayUrl),
       isOverride:!!(ov?.subject||ov?.body),
     };
   };
