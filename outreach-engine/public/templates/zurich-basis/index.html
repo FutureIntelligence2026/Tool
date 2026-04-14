@@ -567,9 +567,9 @@
 
     /* ── FOOTER ── */
     footer {
-      background: var(--primary-dark);
+      background: var(--primary);
       color: rgba(255,255,255,0.8);
-      padding: 64px 0 0;
+      padding: 64px 0 40px;
     }
     .footer-grid {
       display: grid; grid-template-columns: 1fr; gap: 32px;
@@ -589,7 +589,7 @@
     .footer-grid a { color: rgba(255,255,255,0.6); font-size: 14px; transition: color 0.2s; }
     .footer-grid a:hover { color: #fff; }
     .footer-bottom {
-      border-top: 1px solid rgba(255,255,255,0.1);
+      border-top: none;
       padding: 20px 0;
       display: flex; justify-content: space-between; align-items: center;
       font-size: 13px; color: rgba(255,255,255,0.45);
@@ -697,11 +697,11 @@
     <div class="container">
       <div class="stats-grid">
         <div class="stat-item">
-          <div class="stat-num">{{JAHRE}}+</div>
+          <div class="stat-num">10+</div>
           <div class="stat-label">Jahre Erfahrung</div>
         </div>
         <div class="stat-item">
-          <div class="stat-num">{{KUNDEN}}+</div>
+          <div class="stat-num">200+</div>
           <div class="stat-label">Zufriedene Kunden</div>
         </div>
         <div class="stat-item">
@@ -787,7 +787,7 @@
           <span class="section-tag">Über mich</span>
           <h2 class="section-title">Kein Callcenter.<br><span class="gradient-text">Direkt. Persönlich.</span></h2>
           <p style="color:var(--text-muted); font-size:16px; line-height:1.75; margin-bottom:8px;">
-            Mein Name ist {{VORNAME}} {{NACHNAME}}. Seit {{JAHRE}} Jahren berate ich Menschen in {{ORT}} und Umgebung rund um ihre Versicherungen — und ich tue es so, wie ich es mir selbst wünschen würde: ehrlich, klar und ohne Fachchinesisch.
+            Mein Name ist {{VORNAME}} {{NACHNAME}}. Seit 10 Jahren berate ich Menschen in {{ORT}} und Umgebung rund um ihre Versicherungen — und ich tue es so, wie ich es mir selbst wünschen würde: ehrlich, klar und ohne Fachchinesisch.
           </p>
           <p style="color:var(--text-muted); font-size:16px; line-height:1.75;">
             Bei mir haben Sie eine feste Ansprechperson. Kein Weitervermitteln, kein Warteschleifenwarten. Wenn Sie eine Frage haben, rufen Sie mich direkt an.
@@ -980,7 +980,7 @@
             </div>
             <div class="kontakt-item-text">
               <div class="kontakt-item-label">Bürozeiten</div>
-              <div class="kontakt-item-value">{{OEZEITEN}}</div>
+              <div class="kontakt-item-value">Mo–Fr 8–18 Uhr</div>
             </div>
           </div>
         </div>
@@ -1262,10 +1262,7 @@
     'EMAIL':       p.get('e')  || '',
     'STRASSE':     p.get('s')  || '',
     'PLZ':         p.get('p')  || '',
-    'JAHRE':       p.get('j')  || '',
-    'KUNDEN':      p.get('k')  || '',
     'AGENTUR_NAME':p.get('a')  || '',
-    'OEZEITEN':    p.get('oz') || '',
   };
 
   // Set email for handleSubmit

@@ -323,8 +323,6 @@ function generatePreviewUrl(lead, insurerId) {
   if (lead.email)    q.set("e", lead.email);
   if (lead.strasse)  q.set("s", lead.strasse);
   if (lead.plz)      q.set("p", lead.plz);
-  if (lead.jahre)    q.set("j", lead.jahre);
-  if (lead.kunden)   q.set("k", lead.kunden);
   // AGENTUR_NAME = Vorname Nachname
   const agentur = [lead.vorname, lead.nachname].filter(Boolean).join(" ");
   if (agentur) q.set("a", agentur);
