@@ -453,7 +453,7 @@ export default function App() {
   // ── AUTO-SEND: every 2 min, strict 08-18 Uhr, max 30/Tag, max 1 pro Run ────
   const lastSentRef=useRef({});
   useEffect(()=>{
-    const SEND_GAP_MS=20*60*1000; // 20 Min Abstand → 30 Mails gleichmäßig über 08–18 Uhr
+    const SEND_GAP_MS=12*60*1000; // 12 Min Abstand → 30 Mails über 08–18 Uhr
     const HOUR_START=8, HOUR_END=18, DAY_MAX=30;
 
     // Nächsten freien Slot morgen früh (08:05–08:55) berechnen
