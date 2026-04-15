@@ -90,8 +90,9 @@ export default async function handler(req, res) {
     // Send via real SMTP — throws on failure, so IMAP append is never reached on error
     await transporter.sendMail(mailOptions);
 
-    // Confirmed sent: append copy to Sent folder (best-effort, never blocks success response)
-    appendToSentFolder(smtp, rawMessage).catch(() => {});
+    // Confirmed sent: append copy to Sent folder — must await before response,
+    // otherwise Vercel terminates the function before IMAP finishes
+    await appendToSentFolder(smtp, rawMessage).catch(() => {});
 
     return res.status(200).json({ ok: true });
   } catch (err) {
