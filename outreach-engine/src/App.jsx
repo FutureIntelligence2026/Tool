@@ -433,13 +433,33 @@ export default function App() {
   const [testMailResult,setTestMailResult]=useState(null);
   const [editLeadId,setEditLeadId]=useState(null);
   const [editLeadForm,setEditLeadForm]=useState(null);
+  const [redistToast,setRedistToast]=useState(null);
+  const [showAutoStatus,setShowAutoStatus]=useState(false);
+  const [changeAccLead,setChangeAccLead]=useState(null);
+  const [verifyStatus,setVerifyStatus]=useState({}); // {accId: "ok"|"failed"|"checking"}
 
   const activeAccounts=accounts.filter(a=>a.active!==false);
 
   // ── LOCALSTORAGE PERSISTENCE ───────────────────────────────────────────────
   useEffect(()=>{
     try{
-      const sl=localStorage.getItem("ic_leads");     if(sl) setLeads(JSON.parse(sl));
+      const sl=localStorage.getItem("ic_leads");
+      if(sl){
+        let loadedLeads=JSON.parse(sl);
+        // Auto-Fix: Alle Steps eines Leads müssen denselben Account haben
+        // Anker: gesendeter Step > Step 1 > erster Step
+        loadedLeads=loadedLeads.map(lead=>{
+          if(lead.status!=="active")return lead;
+          const seq=lead.sequence||[];
+          const sentStep=seq.find(s=>s.status==="sent"&&s.accountId);
+          const anchorId=sentStep?.accountId||seq.find(s=>s.step===1)?.accountId||seq[0]?.accountId;
+          if(!anchorId)return lead;
+          const needsFix=seq.some(s=>s.status==="scheduled"&&s.scheduledAt&&s.accountId!==anchorId);
+          if(!needsFix)return lead;
+          return{...lead,sequence:seq.map(s=>s.status==="scheduled"&&s.scheduledAt?{...s,accountId:anchorId}:s)};
+        });
+        setLeads(loadedLeads);
+      }
       const sa=localStorage.getItem("ic_accounts");  if(sa) setAccounts(JSON.parse(sa));
       const sv=localStorage.getItem("ic_tplver"); const st=localStorage.getItem("ic_templates"); if(st&&sv===TEMPLATE_VERSION) setTemplates(JSON.parse(st));
       const sp=localStorage.getItem("ic_passwords"); if(sp) setAccPasswords(JSON.parse(sp));
@@ -498,26 +518,33 @@ export default function App() {
         for(const seq of (lead.sequence||[])){
           if(seq.status!=="scheduled"||!seq.scheduledAt)continue;
           if(new Date(seq.scheduledAt)>now)continue;
-          const acc=accounts.find(a=>a.id===seq.accountId&&a.active!==false);
-          if(!acc)continue;
+          // Zugewiesenen Account finden — Fallback auf besten verfügbaren
+          let acc=accounts.find(a=>a.id===seq.accountId&&a.active!==false&&accPasswords[a.id]&&(sentToday[a.id]||0)<DAY_MAX);
+          if(!acc){
+            const avail=accounts.filter(a=>a.active!==false&&accPasswords[a.id]&&(sentToday[a.id]||0)<DAY_MAX);
+            if(!avail.length){
+              // Alle Accounts am Tageslimit — auf morgen verschieben
+              const orig=accounts.find(a=>a.id===seq.accountId);
+              if(orig&&(sentToday[orig.id]||0)>=DAY_MAX){
+                setLeads(p=>p.map(l=>{
+                  if(l.id!==lead.id)return l;
+                  return{...l,sequence:l.sequence.map(s=>s.step===seq.step?{...s,scheduledAt:nextMorningSlot()}:s)};
+                }));
+              }
+              continue;
+            }
+            // Account mit wenigstem Tagesversand wählen
+            acc=avail.sort((a,b)=>(sentToday[a.id]||0)-(sentToday[b.id]||0))[0];
+          }
           const pass=accPasswords[acc.id];
           if(!pass)continue;
-          // Tageslimit 30/Account prüfen
-          if((sentToday[acc.id]||0)>=DAY_MAX){
-            // Limit erreicht — auf morgen verschieben
-            setLeads(p=>p.map(l=>{
-              if(l.id!==lead.id)return l;
-              return{...l,sequence:l.sequence.map(s=>s.step===seq.step?{...s,scheduledAt:nextMorningSlot()}:s)};
-            }));
-            continue;
-          }
-          // 2-Min Mindestabstand pro Account prüfen
+          // 12-Min Mindestabstand pro Account prüfen
           const lastSent=lastSentRef.current[acc.id]||0;
           if(Date.now()-lastSent<SEND_GAP_MS)continue;
 
           const mail=getEffectiveMail(lead,seq.step);
           try{
-            const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:lead.lead.email,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass,fromName:acc.name||IC.name}})});
+            const res=await fetch("/api/send-test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:lead.lead.email,subject:mail.subject,html:mail.bodyHtml,smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass,fromName:acc.name||IC.name,imapHost:acc.imapHost,imapPort:acc.imapPort}})});
             const data=await res.json();
             lastSentRef.current[acc.id]=Date.now();
             if(data.ok){
@@ -562,6 +589,7 @@ export default function App() {
 
   const todayStr=new Date().toDateString();
   const allSteps=leads.flatMap(l=>l.sequence||[]);
+  const autoOk=activeAccounts.some(a=>accPasswords[a.id])&&leads.some(l=>l.status==="active"&&(l.sequence||[]).some(s=>s.status==="scheduled"));
   const stats={
     total:leads.length,active:leads.filter(l=>l.status==="active").length,
     replied:leads.filter(l=>l.status==="replied").length,
@@ -587,6 +615,67 @@ export default function App() {
     setAccForm(EMPTY_ACC);setShowAccForm(false);
   };
   const accColor=id=>{const i=accounts.findIndex(a=>a.id===id);return ACC_COLORS[i%ACC_COLORS.length]||IC.gold;};
+
+  // ── LEADS GLEICHMÄSSIG AUF ALLE AKTIVEN ACCOUNTS VERTEILEN ────────────────
+  // ── SMTP-LOGIN PRÜFEN ─────────────────────────────────────────────────────
+  const verifyAccount=async(acc)=>{
+    const pass=accPasswords[acc.id];
+    if(!pass){setVerifyStatus(p=>({...p,[acc.id]:{status:"failed",error:"Kein Passwort gesetzt"}}));return;}
+    setVerifyStatus(p=>({...p,[acc.id]:{status:"checking"}}));
+    try{
+      const res=await fetch("/api/verify-account",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({smtp:{host:acc.smtpHost,port:parseInt(acc.smtpPort),user:acc.email,pass}})});
+      const data=await res.json();
+      setVerifyStatus(p=>({...p,[acc.id]:data.ok?{status:"ok"}:{status:"failed",error:data.error||"Login fehlgeschlagen"}}));
+    }catch(e){
+      setVerifyStatus(p=>({...p,[acc.id]:{status:"failed",error:"Netzwerkfehler"}}));
+    }
+  };
+
+  // Manuell Account für alle offenen Schritte eines Leads setzen
+  const changeLeadAccount=(leadId,newAccId)=>{
+    setLeads(p=>p.map(l=>{
+      if(l.id!==leadId)return l;
+      return{...l,sequence:(l.sequence||[]).map(s=>s.status==="scheduled"&&s.scheduledAt?{...s,accountId:newAccId}:s)};
+    }));
+    setChangeAccLead(null);
+  };
+
+  const redistributeLeadsToAccounts=()=>{
+    if(!activeAccounts.length)return;
+    // Pro Lead einen Account zuweisen — alle Schritte eines Leads laufen über denselben Account
+    const leadCount={};
+    activeAccounts.forEach(a=>{leadCount[a.id]=0;});
+    let reassigned=0,kept=0;
+    const newLeads=leads.map(lead=>{
+      if(lead.status==="archived"||lead.status==="replied"||lead.status==="stopped")return lead;
+      const scheduledSteps=(lead.sequence||[]).filter(s=>s.status==="scheduled"&&s.scheduledAt);
+      if(!scheduledSteps.length)return lead;
+      // Hat der Lead bereits gesendete Schritte? → selben Account beibehalten
+      const sentStep=(lead.sequence||[]).find(s=>s.status==="sent"&&s.accountId);
+      // Auch in inaktiven Accounts suchen — laufende Automation darf nicht unterbrochen werden
+      const existingAcc=sentStep?accounts.find(a=>a.id===sentStep.accountId):null;
+      let chosenAcc;
+      if(existingAcc){
+        // Automation läuft bereits — Account beibehalten
+        chosenAcc=existingAcc;
+        leadCount[chosenAcc.id]=(leadCount[chosenAcc.id]||0)+1;
+        kept++;
+      } else {
+        // Neuer Lead — Account mit wenigsten Zuweisungen wählen
+        chosenAcc=[...activeAccounts].sort((a,b)=>(leadCount[a.id]||0)-(leadCount[b.id]||0))[0];
+        leadCount[chosenAcc.id]=(leadCount[chosenAcc.id]||0)+1;
+        reassigned++;
+      }
+      const newSeq=(lead.sequence||[]).map(step=>{
+        if(step.status!=="scheduled"||!step.scheduledAt)return step;
+        return{...step,accountId:chosenAcc.id};
+      });
+      return{...lead,sequence:newSeq};
+    });
+    setLeads(newLeads);
+    setRedistToast(`✓ ${reassigned} Leads neu verteilt · ${kept} laufende Automationen beibehalten`);
+    setTimeout(()=>setRedistToast(null),5000);
+  };
 
   const makeLead=(ld,insId)=>({id:Date.now()+Math.random(),lead:{...ld},insurer:insId,previewUrl:generatePreviewUrl(ld,insId),status:"active",sequence:scheduleSequence(ld,new Date(),activeAccounts,templates),createdAt:new Date(),repliedAt:null,mailOverrides:{}});
   const validateLead=l=>{const e={};["vorname","nachname","email","telefon","ort"].forEach(k=>{if(!l[k]?.trim())e[k]=true;});setFormErrors(e);return!Object.keys(e).length;};
@@ -906,6 +995,9 @@ export default function App() {
           <div>
             <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
               <button style={S.btn()} onClick={exportCSV} disabled={!leads.length}>📊 CSV</button>
+              <button style={{...S.btn(autoOk?"ghost":"red"),fontSize:12,padding:"6px 12px"}} onClick={()=>setShowAutoStatus(p=>!p)}>
+                {autoOk?"✓ Automation aktiv":"⚠ Status prüfen"}
+              </button>
               {stats.next&&(
                 <div style={{marginLeft:"auto",fontSize:9,color:"#3a3830",display:"flex",alignItems:"center",gap:5,background:"#111108",border:`1px solid #1e1e14`,borderRadius:8,padding:"5px 10px"}}>
                   <span style={{color:IC.gold,fontWeight:700}}>Nächste:</span>
@@ -915,6 +1007,83 @@ export default function App() {
                 </div>
               )}
             </div>
+            {showAutoStatus&&(()=>{
+              const todayS=new Date().toDateString();
+              const sentToday=allSteps.filter(s=>s.status==="sent"&&s.sentAt&&new Date(s.sentAt).toDateString()===todayS);
+              const failedSteps=allSteps.filter(s=>s.status==="failed");
+              const scheduledToday=allSteps.filter(s=>s.status==="scheduled"&&s.scheduledAt&&new Date(s.scheduledAt).toDateString()===todayS);
+              const accWithPass=activeAccounts.filter(a=>accPasswords[a.id]);
+              const accWithoutPass=activeAccounts.filter(a=>!accPasswords[a.id]);
+              const hasScheduled=leads.some(l=>l.status==="active"&&(l.sequence||[]).some(s=>s.status==="scheduled"));
+              const isRunning=accWithPass.length>0&&hasScheduled;
+              // Pro Account heute gesendet
+              const sentPerAcc={};
+              sentToday.forEach(s=>{sentPerAcc[s.accountId]=(sentPerAcc[s.accountId]||0)+1;});
+              return(
+                <div style={{...S.card,marginBottom:12,border:`1px solid ${isRunning?"#86efac":"#fca5a5"}`}}>
+                  {/* Header */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:10,height:10,borderRadius:"50%",background:isRunning?"#22c55e":"#ef4444",boxShadow:isRunning?"0 0 6px #22c55e":"0 0 6px #ef4444"}}/>
+                      <span style={{fontSize:12,fontWeight:700,color:isRunning?"#15803d":"#dc2626"}}>{isRunning?"Automation läuft":"Automation gestoppt / Problem"}</span>
+                    </div>
+                    <button style={{...S.btn("ghost"),fontSize:9,padding:"2px 7px"}} onClick={()=>setShowAutoStatus(false)}>✕</button>
+                  </div>
+                  {/* Account-Status */}
+                  <div style={{marginBottom:8}}>
+                    <div style={{fontSize:9,fontWeight:700,color:"#64748b",marginBottom:4,textTransform:"uppercase"}}>Accounts</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                      {activeAccounts.map((a,i)=>{
+                        const hasPw=!!accPasswords[a.id];
+                        const todaySent=sentPerAcc[a.id]||0;
+                        return(
+                          <div key={a.id} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",background:hasPw?"#f0fdf4":"#fef2f2",borderRadius:6,border:`1px solid ${hasPw?"#bbf7d0":"#fecaca"}`}}>
+                            <div style={{width:6,height:6,borderRadius:"50%",background:ACC_COLORS[i%ACC_COLORS.length],flexShrink:0}}/>
+                            <span style={{fontSize:10,fontWeight:600,flex:1,color:"#1e2532"}}>{a.email}</span>
+                            {hasPw
+                              ?<span style={{fontSize:9,color:"#15803d",fontWeight:700}}>✓ Passwort · {todaySent}/30 heute</span>
+                              :<span style={{fontSize:9,color:"#dc2626",fontWeight:700}}>⚠ Kein Passwort gesetzt!</span>
+                            }
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {accWithoutPass.length>0&&<div style={{fontSize:9,color:"#dc2626",marginTop:5,fontWeight:600}}>→ Passwörter im Accounts-Tab eintragen damit alle Mails versendet werden.</div>}
+                  </div>
+                  {/* Statistiken */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:failedSteps.length?8:0}}>
+                    {[
+                      {l:"Heute gesendet",v:sentToday.length,c:"#15803d"},
+                      {l:"Heute offen",v:scheduledToday.length,c:"#2563eb"},
+                      {l:"Fehler gesamt",v:failedSteps.length,c:failedSteps.length?"#dc2626":"#15803d"},
+                      {l:"Aktive Leads",v:leads.filter(l=>l.status==="active").length,c:"#7c3aed"},
+                    ].map(x=>(
+                      <div key={x.l} style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                        <div style={{fontSize:18,fontWeight:700,color:x.c}}>{x.v}</div>
+                        <div style={{fontSize:8,color:"#64748b",marginTop:1}}>{x.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Fehler-Liste */}
+                  {failedSteps.length>0&&(
+                    <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,padding:"8px 10px"}}>
+                      <div style={{fontSize:9,fontWeight:700,color:"#dc2626",marginBottom:4}}>Fehlgeschlagene E-Mails ({failedSteps.length})</div>
+                      {leads.filter(l=>(l.sequence||[]).some(s=>s.status==="failed")).slice(0,5).map(l=>{
+                        const fs=l.sequence.find(s=>s.status==="failed");
+                        return<div key={l.id} style={{fontSize:8,color:"#7f1d1d",marginBottom:2}}>· {l.lead.vorname} {l.lead.nachname} — M{fs?.step}: {fs?.failReason||"Unbekannt"}</div>;
+                      })}
+                      {leads.filter(l=>(l.sequence||[]).some(s=>s.status==="failed")).length>5&&<div style={{fontSize:8,color:"#dc2626"}}>+ {leads.filter(l=>(l.sequence||[]).some(s=>s.status==="failed")).length-5} weitere...</div>}
+                    </div>
+                  )}
+                  {/* Nächste Mail */}
+                  {stats.next&&(
+                    <div style={{marginTop:8,fontSize:9,color:"#64748b"}}>
+                      Nächste Mail: <span style={{color:"#1e2532",fontWeight:600}}>{stats.next.name}</span> · M{stats.next.step} · <span style={{color:IC.gold,fontWeight:600}}>{new Date(stats.next.scheduledAt).toLocaleString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</span> · via <span style={{fontWeight:600}}>{accounts.find(a=>a.id===stats.next.accountId)?.email||"?"}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {detectLog.length>0&&(
               <div style={{...S.goldCard,marginBottom:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}><span style={{fontSize:9,color:IC.gold,fontWeight:700}}>🔍 Auto-Detection</span><button style={{...S.btn("ghost"),padding:"1px 5px",fontSize:8}} onClick={()=>setDetectLog([])}>✕</button></div>
@@ -953,13 +1122,33 @@ export default function App() {
                       <span style={{fontSize:8,color:"#3a3830",marginLeft:2}}>{sentCount}/5</span>
                     </div>
                     {lead.status==="active"&&(()=>{const ns=lead.sequence?.find(s=>s.status==="scheduled");if(!ns)return null;return<div style={{fontSize:8,textAlign:"right",minWidth:65}}><div style={{color:IC.gold,fontWeight:700}}>{new Date(ns.scheduledAt).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})} {new Date(ns.scheduledAt).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})}</div><div style={{color:accColor(ns.accountId),marginTop:1,fontSize:7}}>{accounts.find(a=>a.id===ns.accountId)?.email?.split("@")[0]||"?"}</div></div>;})()}
-                    <div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
-                      {lead.status==="active"&&<button style={S.btn("green")} onClick={()=>markReplied(lead.id)}>✉ Geantwortet</button>}
-                      {lead.status==="replied"&&<button style={{...S.btn("ghost"),fontSize:11}} onClick={()=>unmarkReplied(lead.id)}>↩ Zurücksetzen</button>}
-                      {lead.status==="active"&&<button style={S.btn("red")} onClick={()=>stopLead(lead.id)}>⏹</button>}
-                      <button title="Bearbeiten" style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px"}} onClick={()=>startEditLead(lead)}>✏</button>
-                      <button title={lead.status==="archived"?"Wiederherstellen":"Archivieren"} style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px",color:"#94a3b8"}} onClick={()=>archiveLead(lead.id)}>{lead.status==="archived"?"↩":"📁"}</button>
-                      <button title="Löschen" style={{...S.btn("red"),fontSize:10,padding:"3px 7px"}} onClick={()=>removeLead(lead.id)}>🗑</button>
+                    <div style={{display:"flex",gap:3,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+                      {changeAccLead===lead.id?(
+                        <>
+                          <span style={{fontSize:8,color:"#64748b",alignSelf:"center",whiteSpace:"nowrap"}}>Account wählen:</span>
+                          {activeAccounts.map((a,i)=>(
+                            <button key={a.id} style={{...S.btn("ghost"),fontSize:8,padding:"3px 7px",display:"flex",alignItems:"center",gap:3}} onClick={()=>changeLeadAccount(lead.id,a.id)}>
+                              <div style={{width:6,height:6,borderRadius:"50%",background:ACC_COLORS[i%ACC_COLORS.length],flexShrink:0}}/>
+                              {a.email.split("@")[0]}
+                            </button>
+                          ))}
+                          <button style={{...S.btn("ghost"),fontSize:8,padding:"3px 7px"}} onClick={()=>setChangeAccLead(null)}>✕</button>
+                        </>
+                      ):(
+                        <>
+                          {lead.status==="active"&&<button style={S.btn("green")} onClick={()=>markReplied(lead.id)}>✉ Geantwortet</button>}
+                          {lead.status==="replied"&&<button style={{...S.btn("ghost"),fontSize:11}} onClick={()=>unmarkReplied(lead.id)}>↩ Zurücksetzen</button>}
+                          {lead.status==="active"&&<button style={S.btn("red")} onClick={()=>stopLead(lead.id)}>⏹</button>}
+                          {lead.status==="active"&&(lead.sequence||[]).some(s=>s.status==="scheduled")&&(
+                            <button title="Account für alle offenen Schritte ändern" style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px",display:"flex",alignItems:"center",gap:3}} onClick={()=>setChangeAccLead(lead.id)}>
+                              <div style={{width:6,height:6,borderRadius:"50%",background:accColor((lead.sequence||[]).find(s=>s.status==="scheduled")?.accountId),flexShrink:0}}/>🔀
+                            </button>
+                          )}
+                          <button title="Bearbeiten" style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px"}} onClick={()=>startEditLead(lead)}>✏</button>
+                          <button title={lead.status==="archived"?"Wiederherstellen":"Archivieren"} style={{...S.btn("ghost"),fontSize:10,padding:"3px 7px",color:"#94a3b8"}} onClick={()=>archiveLead(lead.id)}>{lead.status==="archived"?"↩":"📁"}</button>
+                          <button title="Löschen" style={{...S.btn("red"),fontSize:10,padding:"3px 7px"}} onClick={()=>removeLead(lead.id)}>🗑</button>
+                        </>
+                      )}
                     </div>
                     <span style={{fontSize:9,color:"#3a3830"}}>{isExp?"▲":"▼"}</span>
                   </div>
@@ -1163,8 +1352,14 @@ export default function App() {
         {tab==="accounts"&&(
           <div style={{maxWidth:700}}>
             <div style={S.goldCard}>
-              <div style={{fontSize:10,color:IC.gold,fontWeight:700,marginBottom:3}}>{activeAccounts.length*30} Mails/Tag Kapazität</div>
-              <div style={{fontSize:9,color:IC.muted}}>30/Tag pro Account · 08–18 Uhr · Automatisch rotiert · Passwort wird lokal gespeichert<br/>Gmail: smtp.gmail.com:587, App-Passwort verwenden (Google Konto → Sicherheit → App-Passwörter)</div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+                <div>
+                  <div style={{fontSize:10,color:IC.gold,fontWeight:700,marginBottom:3}}>{activeAccounts.length*30} Mails/Tag Kapazität</div>
+                  <div style={{fontSize:9,color:IC.muted}}>30/Tag pro Account · 08–18 Uhr · Automatisch rotiert · Passwort wird lokal gespeichert<br/>Gmail: smtp.gmail.com:587, App-Passwort verwenden (Google Konto → Sicherheit → App-Passwörter)</div>
+                </div>
+                {activeAccounts.length>1&&<button style={{...S.btn("green"),fontSize:11,padding:"7px 14px"}} onClick={redistributeLeadsToAccounts}>⇄ Leads auf {activeAccounts.length} Accounts verteilen</button>}
+              </div>
+              {redistToast&&<div style={{marginTop:8,padding:"7px 12px",background:"#dcfce7",border:"1px solid #86efac",borderRadius:7,fontSize:10,fontWeight:700,color:"#15803d"}}>{redistToast}</div>}
             </div>
             {accounts.map((acc,i)=>(
               <div key={acc.id} style={{...S.card,opacity:acc.active?1:0.5}}>
@@ -1180,10 +1375,24 @@ export default function App() {
                     <input type="password" value={accPasswords[acc.id]||""} onChange={e=>setAccPasswords(p=>({...p,[acc.id]:e.target.value}))} placeholder="Strato-Passwort" style={{...S.inp(false),fontSize:10,padding:"5px 9px"}} onFocus={e=>e.target.style.borderColor=IC.gold} onBlur={e=>e.target.style.borderColor="#1e1e14"}/>
                     <div style={{fontSize:7,color:"#10b981",marginTop:2}}>✓ Wird lokal gespeichert</div>
                   </div>
-                  <div style={{display:"flex",gap:4}}>
-                    <button style={S.btn(acc.active?"ghost":"green")} onClick={()=>setAccounts(p=>p.map(a=>a.id===acc.id?{...a,active:!a.active}:a))}>{acc.active?"⏸":"▶"}</button>
-                    <button style={S.btn("ghost")} onClick={()=>{setAccForm({name:acc.name,email:acc.email,smtpHost:acc.smtpHost,smtpPort:acc.smtpPort,imapHost:acc.imapHost,imapPort:acc.imapPort});setEditAccId(acc.id);setShowAccForm(true);}}>✏</button>
-                    <button style={S.btn("red")} onClick={()=>setAccounts(p=>p.filter(a=>a.id!==acc.id))}>✕</button>
+                  <div style={{display:"flex",gap:4,flexDirection:"column",alignItems:"flex-end"}}>
+                    <div style={{display:"flex",gap:4}}>
+                      <button style={S.btn(acc.active?"ghost":"green")} onClick={()=>setAccounts(p=>p.map(a=>a.id===acc.id?{...a,active:!a.active}:a))}>{acc.active?"⏸":"▶"}</button>
+                      <button style={S.btn("ghost")} onClick={()=>{setAccForm({name:acc.name,email:acc.email,smtpHost:acc.smtpHost,smtpPort:acc.smtpPort,imapHost:acc.imapHost,imapPort:acc.imapPort});setEditAccId(acc.id);setShowAccForm(true);}}>✏</button>
+                      <button style={S.btn("red")} onClick={()=>setAccounts(p=>p.filter(a=>a.id!==acc.id))}>✕</button>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      {verifyStatus[acc.id]&&(
+                        verifyStatus[acc.id].status==="checking"
+                          ?<span style={{fontSize:8,color:"#64748b"}}>Prüfe…</span>
+                          :verifyStatus[acc.id].status==="ok"
+                            ?<span style={{fontSize:8,color:"#15803d",fontWeight:700}}>✓ Login OK</span>
+                            :<span style={{fontSize:8,color:"#dc2626",fontWeight:700}} title={verifyStatus[acc.id].error}>✕ Failed: {verifyStatus[acc.id].error?.slice(0,40)}</span>
+                      )}
+                      <button style={{...S.btn("ghost"),fontSize:8,padding:"2px 8px"}} onClick={()=>verifyAccount(acc)}>
+                        {verifyStatus[acc.id]?.status==="checking"?"…":"⚙ Login prüfen"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
